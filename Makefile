@@ -116,8 +116,13 @@ jar: gojava
 
 release: version plugins upload-su3s
 
+tag:
+	git tag -a v$(VERSION) -m "Release $(VERSION)"
+	git push --tags
+
 version:
-	head -n 5 README.md | github-release release -s $(GITHUB_TOKEN) -u $(USER_GH) -r $(APP) -t v$(VERSION) -d -; true
+	#head -n 5 README.md | github-release release -s $(GITHUB_TOKEN) -u $(USER_GH) -r $(APP) -t v$(VERSION) -d -; true
+	echo "make version is deprecated, use make tag instead"
 
 delete-version:
 	github-release delete -s $(GITHUB_TOKEN) -u $(USER_GH) -r $(APP) -t v$(VERSION)
