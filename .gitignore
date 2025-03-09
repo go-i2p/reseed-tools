@@ -22,3 +22,5 @@ audit.json
 client.yaml
 plugin.yaml
 err
+/plugin-linux-amd64.yaml
+/client-linux-amd64.yaml
