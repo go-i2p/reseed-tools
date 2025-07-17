@@ -14,12 +14,19 @@ import (
 	"time"
 )
 
+// dsaSignature represents a DSA signature containing R and S components.
+// Used for ASN.1 encoding/decoding of DSA signatures in SU3 verification.
 type dsaSignature struct {
 	R, S *big.Int
 }
 
+// ecdsaSignature represents an ECDSA signature, which has the same structure as DSA.
+// This type alias provides semantic clarity when working with ECDSA signatures.
 type ecdsaSignature dsaSignature
 
+// checkSignature verifies a digital signature against signed data using the specified certificate.
+// It supports RSA, DSA, and ECDSA signature algorithms with various hash functions (SHA1, SHA256, SHA384, SHA512).
+// This function extends the standard x509 signature verification to support additional algorithms needed for SU3 files.
 func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, signature []byte) (err error) {
 	if c == nil {
 		return errors.New("x509: certificate is nil")
@@ -27,6 +34,8 @@ func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, s
 
 	var hashType crypto.Hash
 
+	// Map signature algorithm to appropriate hash function
+	// Each algorithm specifies both the signature method and hash type
 	switch algo {
 	case x509.SHA1WithRSA, x509.DSAWithSHA1, x509.ECDSAWithSHA1:
 		hashType = crypto.SHA1
@@ -48,6 +57,8 @@ func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, s
 	h.Write(signed)
 	digest := h.Sum(nil)
 
+	// Verify signature based on public key algorithm type
+	// Each algorithm has different signature formats and verification procedures
 	switch pub := c.PublicKey.(type) {
 	case *rsa.PublicKey:
 		// the digest is already hashed, so we force a 0 here
@@ -57,6 +68,8 @@ func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, s
 		if _, err := asn1.Unmarshal(signature, dsaSig); err != nil {
 			return err
 		}
+		// Validate DSA signature components are positive integers
+		// Zero or negative values indicate malformed or invalid signatures
 		if dsaSig.R.Sign() <= 0 || dsaSig.S.Sign() <= 0 {
 			return errors.New("x509: DSA signature contained zero or negative values")
 		}
@@ -69,6 +82,8 @@ func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, s
 		if _, err := asn1.Unmarshal(signature, ecdsaSig); err != nil {
 			return err
 		}
+		// Validate ECDSA signature components are positive integers
+		// Similar validation to DSA as both use R,S component pairs
 		if ecdsaSig.R.Sign() <= 0 || ecdsaSig.S.Sign() <= 0 {
 			return errors.New("x509: ECDSA signature contained zero or negative values")
 		}
@@ -80,6 +95,10 @@ func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, s
 	return x509.ErrUnsupportedAlgorithm
 }
 
+// NewSigningCertificate creates a self-signed X.509 certificate for SU3 file signing.
+// It generates a certificate with the specified signer ID and RSA private key for use in
+// I2P reseed operations. The certificate is valid for 10 years and includes proper key usage
+// extensions for digital signatures.
 func NewSigningCertificate(signerID string, privateKey *rsa.PrivateKey) ([]byte, error) {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -89,6 +108,8 @@ func NewSigningCertificate(signerID string, privateKey *rsa.PrivateKey) ([]byte,
 
 	var subjectKeyId []byte
 	isCA := true
+	// Configure certificate authority status based on signer ID presence
+	// Empty signer IDs create non-CA certificates to prevent auto-generation issues
 	if signerID != "" {
 		subjectKeyId = []byte(signerID)
 	} else {
@@ -118,7 +139,8 @@ func NewSigningCertificate(signerID string, privateKey *rsa.PrivateKey) ([]byte,
 
 	publicKey := &privateKey.PublicKey
 
-	// create a self-signed certificate. template = parent
+	// Create self-signed certificate using template as both subject and issuer
+	// This generates a root certificate suitable for SU3 file signing operations
 	parent := template
 	cert, err := x509.CreateCertificate(rand.Reader, template, parent, publicKey, privateKey)
 	if err != nil {
