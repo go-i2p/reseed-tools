@@ -1,15 +1,17 @@
 package cmd
 
 import (
+	"context"
 	"crypto/rsa"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	//"flag"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -557,30 +559,275 @@ func initializeReseeder(c *cli.Context, netdbDir, signerID string, privKey *rsa.
 	return reseeder, nil
 }
 
-// startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS).
-func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
-	if c.Bool("onion") {
-		lgr.WithField("service", "onion").Debug("Onion server starting")
-		if tlsConfig.tlsHost != "" && tlsConfig.tlsCert != "" && tlsConfig.tlsKey != "" {
-			go reseedOnion(c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder)
-		} else {
-			reseedOnion(c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder)
-		}
+// Context-aware server functions that return errors instead of calling Fatal
+func reseedHTTPSWithContext(ctx context.Context, c *cli.Context, tlsCert, tlsKey string, reseeder *reseed.ReseederImpl) error {
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
+	server.Reseeder = reseeder
+	server.RequestRateLimit = c.Int("ratelimit")
+	server.WebRateLimit = c.Int("ratelimitweb")
+	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+
+	// load a blacklist
+	blacklist := reseed.NewBlacklist()
+	server.Blacklist = blacklist
+	blacklistFile := c.String("blacklist")
+	if "" != blacklistFile {
+		blacklist.LoadFile(blacklistFile)
 	}
-	if c.Bool("i2p") {
-		lgr.WithField("service", "i2p").Debug("I2P server starting")
-		if tlsConfig.tlsHost != "" && tlsConfig.tlsCert != "" && tlsConfig.tlsKey != "" {
-			go reseedI2P(c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder)
-		} else {
-			reseedI2P(c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder)
-		}
+
+	// print stats once in a while
+	if c.Duration("stats") != 0 {
+		go func() {
+			var mem runtime.MemStats
+			ticker := time.NewTicker(c.Duration("stats"))
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					runtime.ReadMemStats(&mem)
+					lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
+				}
+			}
+		}()
 	}
-	if !c.Bool("trustProxy") {
-		lgr.WithField("service", "https").Debug("HTTPS server starting")
-		reseedHTTPS(c, tlsConfig.tlsCert, tlsConfig.tlsKey, reseeder)
+
+	lgr.WithField("address", server.Addr).Debug("HTTPS server started")
+	return server.ListenAndServeTLS(tlsCert, tlsKey)
+}
+
+func reseedHTTPWithContext(ctx context.Context, c *cli.Context, reseeder *reseed.ReseederImpl) error {
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
+	server.RequestRateLimit = c.Int("ratelimit")
+	server.WebRateLimit = c.Int("ratelimitweb")
+	server.Reseeder = reseeder
+	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+
+	// load a blacklist
+	blacklist := reseed.NewBlacklist()
+	server.Blacklist = blacklist
+	blacklistFile := c.String("blacklist")
+	if "" != blacklistFile {
+		blacklist.LoadFile(blacklistFile)
+	}
+
+	// print stats once in a while
+	if c.Duration("stats") != 0 {
+		go func() {
+			var mem runtime.MemStats
+			ticker := time.NewTicker(c.Duration("stats"))
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					runtime.ReadMemStats(&mem)
+					lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
+				}
+			}
+		}()
+	}
+
+	lgr.WithField("address", server.Addr).Debug("HTTP server started")
+	return server.ListenAndServe()
+}
+
+func reseedOnionWithContext(ctx context.Context, c *cli.Context, onionTlsCert, onionTlsKey string, reseeder *reseed.ReseederImpl) error {
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
+	server.Reseeder = reseeder
+	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+
+	// load a blacklist
+	blacklist := reseed.NewBlacklist()
+	server.Blacklist = blacklist
+	blacklistFile := c.String("blacklist")
+	if "" != blacklistFile {
+		blacklist.LoadFile(blacklistFile)
+	}
+
+	// print stats once in a while
+	if c.Duration("stats") != 0 {
+		go func() {
+			var mem runtime.MemStats
+			ticker := time.NewTicker(c.Duration("stats"))
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					runtime.ReadMemStats(&mem)
+					lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
+				}
+			}
+		}()
+	}
+
+	port, err := strconv.Atoi(c.String("port"))
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
+	port += 1
+
+	if _, err := os.Stat(c.String("onionKey")); err == nil {
+		ok, err := ioutil.ReadFile(c.String("onionKey"))
+		if err != nil {
+			return fmt.Errorf("failed to read onion key: %w", err)
+		}
+
+		if onionTlsCert != "" && onionTlsKey != "" {
+			tlc := &tor.ListenConf{
+				LocalPort:    port,
+				Key:          ed25519.PrivateKey(ok),
+				RemotePorts:  []int{443},
+				Version3:     true,
+				NonAnonymous: c.Bool("singleOnion"),
+				DiscardKey:   false,
+			}
+			return server.ListenAndServeOnionTLS(nil, tlc, onionTlsCert, onionTlsKey)
+		} else {
+			tlc := &tor.ListenConf{
+				LocalPort:    port,
+				Key:          ed25519.PrivateKey(ok),
+				RemotePorts:  []int{80},
+				Version3:     true,
+				NonAnonymous: c.Bool("singleOnion"),
+				DiscardKey:   false,
+			}
+			return server.ListenAndServeOnion(nil, tlc)
+		}
+	} else if os.IsNotExist(err) {
+		tlc := &tor.ListenConf{
+			LocalPort:    port,
+			RemotePorts:  []int{80},
+			Version3:     true,
+			NonAnonymous: c.Bool("singleOnion"),
+			DiscardKey:   false,
+		}
+		return server.ListenAndServeOnion(nil, tlc)
+	}
+
+	return fmt.Errorf("onion key file error: %w", err)
+}
+
+func reseedI2PWithContext(ctx context.Context, c *cli.Context, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) error {
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
+	server.RequestRateLimit = c.Int("ratelimit")
+	server.WebRateLimit = c.Int("ratelimitweb")
+	server.Reseeder = reseeder
+	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+
+	// load a blacklist
+	blacklist := reseed.NewBlacklist()
+	server.Blacklist = blacklist
+	blacklistFile := c.String("blacklist")
+	if "" != blacklistFile {
+		blacklist.LoadFile(blacklistFile)
+	}
+
+	// print stats once in a while
+	if c.Duration("stats") != 0 {
+		go func() {
+			var mem runtime.MemStats
+			ticker := time.NewTicker(c.Duration("stats"))
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					runtime.ReadMemStats(&mem)
+					lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
+				}
+			}
+		}()
+	}
+
+	port, err := strconv.Atoi(c.String("port"))
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
+	port += 1
+
+	if i2pTlsCert != "" && i2pTlsKey != "" {
+		return server.ListenAndServeI2PTLS(c.String("samaddr"), i2pIdentKey, i2pTlsCert, i2pTlsKey)
 	} else {
-		lgr.WithField("service", "http").Debug("HTTP server starting")
-		reseedHTTP(c, reseeder)
+		return server.ListenAndServeI2P(c.String("samaddr"), i2pIdentKey)
+	}
+}
+
+// startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS) with proper coordination.
+func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 3) // Buffer for up to 3 server errors
+
+	// Start onion server if enabled
+	if c.Bool("onion") {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lgr.WithField("service", "onion").Debug("Onion server starting")
+			if err := reseedOnionWithContext(ctx, c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder); err != nil {
+				select {
+				case errChan <- fmt.Errorf("onion server error: %w", err):
+				default:
+				}
+			}
+		}()
+	}
+
+	// Start I2P server if enabled
+	if c.Bool("i2p") {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lgr.WithField("service", "i2p").Debug("I2P server starting")
+			if err := reseedI2PWithContext(ctx, c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder); err != nil {
+				select {
+				case errChan <- fmt.Errorf("i2p server error: %w", err):
+				default:
+				}
+			}
+		}()
+	}
+
+	// Start HTTP/HTTPS server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if !c.Bool("trustProxy") {
+			lgr.WithField("service", "https").Debug("HTTPS server starting")
+			if err := reseedHTTPSWithContext(ctx, c, tlsConfig.tlsCert, tlsConfig.tlsKey, reseeder); err != nil {
+				select {
+				case errChan <- fmt.Errorf("https server error: %w", err):
+				default:
+				}
+			}
+		} else {
+			lgr.WithField("service", "http").Debug("HTTP server starting")
+			if err := reseedHTTPWithContext(ctx, c, reseeder); err != nil {
+				select {
+				case errChan <- fmt.Errorf("http server error: %w", err):
+				default:
+				}
+			}
+		}
+	}()
+
+	// Wait for first error or all servers to complete
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	// Handle the first error that occurs
+	if err := <-errChan; err != nil {
+		lgr.WithError(err).Fatal("Fatal server error")
 	}
 }
 
