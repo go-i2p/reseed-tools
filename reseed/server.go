@@ -31,7 +31,7 @@ type Server struct {
 	*http.Server
 
 	// Reseeder handles the core reseed functionality and SU3 file generation
-	Reseeder  *ReseederImpl
+	Reseeder *ReseederImpl
 	// Blacklist manages IP-based access control for security
 	Blacklist *Blacklist
 

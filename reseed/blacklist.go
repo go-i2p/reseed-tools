@@ -16,7 +16,7 @@ type Blacklist struct {
 	// blacklist stores the blocked IP addresses as a map for O(1) lookup performance
 	blacklist map[string]bool
 	// m provides thread-safe access to the blacklist map using read-write semantics
-	m         sync.RWMutex
+	m sync.RWMutex
 }
 
 // NewBlacklist creates a new empty blacklist instance with initialized internal structures.

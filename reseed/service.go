@@ -51,18 +51,18 @@ type ReseederImpl struct {
 	// netdb provides access to the local router information database
 	netdb *LocalNetDbImpl
 	// su3s channel buffers pre-built SU3 files for efficient serving
-	su3s  chan [][]byte
+	su3s chan [][]byte
 
 	// SigningKey contains the RSA private key for SU3 file cryptographic signing
-	SigningKey      *rsa.PrivateKey
+	SigningKey *rsa.PrivateKey
 	// SignerID contains the identity string used in SU3 signature verification
-	SignerID        []byte
+	SignerID []byte
 	// NumRi specifies the number of router infos to include in each SU3 file
-	NumRi           int
+	NumRi int
 	// RebuildInterval determines how often to refresh the SU3 file cache
 	RebuildInterval time.Duration
 	// NumSu3 specifies the number of pre-built SU3 files to maintain
-	NumSu3          int
+	NumSu3 int
 }
 
 // NewReseeder creates a new reseed service instance with default configuration.
@@ -248,11 +248,20 @@ func (rs *ReseederImpl) createSu3(seeds []routerInfo) (*su3.File, error) {
 	RouterInfos() ([]routerInfo, error)
 }*/
 
+// LocalNetDbImpl provides access to the local I2P router information database.
+// It manages reading and filtering router info files from the filesystem, applying
+// age-based filtering to ensure only recent and valid router information is included
+// in reseed packages distributed to new I2P nodes joining the network.
 type LocalNetDbImpl struct {
-	Path             string
+	// Path specifies the filesystem location of the router information database
+	Path string
+	// MaxRouterInfoAge defines the maximum age for including router info in reseeds
 	MaxRouterInfoAge time.Duration
 }
 
+// NewLocalNetDb creates a new local router database instance with specified parameters.
+// The path should point to an I2P netDb directory containing routerInfo files, and maxAge
+// determines how old router information can be before it's excluded from reseed packages.
 func NewLocalNetDb(path string, maxAge time.Duration) *LocalNetDbImpl {
 	return &LocalNetDbImpl{
 		Path:             path,
