@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -82,7 +81,7 @@ func NewServer(prefix string, trustProxy bool) *Server {
 	errorHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		if _, err := w.Write(nil); nil != err {
-			log.Println(err)
+			lgr.WithError(err).Error("Error writing HTTP response")
 		}
 	})
 
@@ -129,7 +128,7 @@ func SecureRandomBytes(length int) []byte {
 	// Use crypto/rand for cryptographically secure random generation
 	_, err := rand.Read(randomBytes)
 	if err != nil {
-		log.Fatal("Unable to generate random bytes")
+		lgr.WithError(err).Fatal("Unable to generate random bytes")
 	}
 	return randomBytes
 }
@@ -217,7 +216,7 @@ func (srv *Server) reseedHandler(w http.ResponseWriter, r *http.Request) {
 
 	su3Bytes, err := srv.Reseeder.PeerSu3Bytes(peer)
 	if nil != err {
-		log.Println("Error serving su3:", err)
+		lgr.WithError(err).WithField("peer", peer).Error("Error serving su3")
 		http.Error(w, "500 Unable to serve su3", http.StatusInternalServerError)
 		return
 	}

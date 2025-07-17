@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -93,7 +92,7 @@ func su3VerifyAction(c *cli.Context) error {
 	if c.String("signer") != "" {
 		su3File.SignerID = []byte(c.String("signer"))
 	}
-	log.Println("Using keystore:", absPath, "for purpose", reseedDir, "and", string(su3File.SignerID))
+	lgr.WithField("keystore", absPath).WithField("purpose", reseedDir).WithField("signer", string(su3File.SignerID)).Debug("Using keystore")
 
 	cert, err := ks.DirReseederCertificate(reseedDir, su3File.SignerID)
 	if nil != err {

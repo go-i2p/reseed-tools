@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
-	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -95,7 +94,7 @@ func (rs *ReseederImpl) Start() chan bool {
 	// init the cache
 	err := rs.rebuild()
 	if nil != err {
-		log.Println(err)
+		lgr.WithError(err).Error("Error during initial rebuild")
 	}
 
 	ticker := time.NewTicker(rs.RebuildInterval)
@@ -106,7 +105,7 @@ func (rs *ReseederImpl) Start() chan bool {
 			case <-ticker.C:
 				err := rs.rebuild()
 				if nil != err {
-					log.Println(err)
+					lgr.WithError(err).Error("Error during periodic rebuild")
 				}
 			case <-quit:
 				ticker.Stop()
@@ -119,7 +118,7 @@ func (rs *ReseederImpl) Start() chan bool {
 }
 
 func (rs *ReseederImpl) rebuild() error {
-	log.Println("Rebuilding su3 cache...")
+	lgr.WithField("operation", "rebuild").Debug("Rebuilding su3 cache...")
 
 	// get all RIs from netdb provider
 	ris, err := rs.netdb.RouterInfos()
@@ -154,7 +153,7 @@ func (rs *ReseederImpl) rebuild() error {
 	// use this new set of su3s
 	rs.su3s <- newSu3s
 
-	log.Println("Done rebuilding.")
+	lgr.WithField("operation", "rebuild").Debug("Done rebuilding.")
 
 	return nil
 }
@@ -181,7 +180,7 @@ func (rs *ReseederImpl) seedsProducer(ris []routerInfo) <-chan []routerInfo {
 		}
 	}
 
-	log.Printf("Building %d su3 files each containing %d out of %d routerInfos.\n", numSu3s, rs.NumRi, lenRis)
+	lgr.WithField("su3_count", numSu3s).WithField("routerinfos_per_su3", rs.NumRi).WithField("total_routerinfos", lenRis).Debug("Building su3 files")
 
 	out := make(chan []routerInfo)
 
@@ -207,7 +206,7 @@ func (rs *ReseederImpl) su3Builder(in <-chan []routerInfo) <-chan *su3.File {
 		for seeds := range in {
 			gs, err := rs.createSu3(seeds)
 			if nil != err {
-				log.Println(err)
+				lgr.WithError(err).Error("Error creating su3 file")
 				continue
 			}
 
@@ -288,7 +287,7 @@ func (db *LocalNetDbImpl) RouterInfos() (routerInfos []routerInfo, err error) {
 	for path, file := range files {
 		riBytes, err := os.ReadFile(path)
 		if nil != err {
-			log.Println(err)
+			lgr.WithError(err).WithField("path", path).Error("Error reading RouterInfo file")
 			continue
 		}
 
@@ -299,8 +298,8 @@ func (db *LocalNetDbImpl) RouterInfos() (routerInfos []routerInfo, err error) {
 		}
 		riStruct, remainder, err := router_info.ReadRouterInfo(riBytes)
 		if err != nil {
-			log.Println("RouterInfo Parsing Error:", err)
-			log.Println("Leftover Data(for debugging):", remainder)
+			lgr.WithError(err).WithField("path", path).Error("RouterInfo Parsing Error")
+			lgr.WithField("path", path).WithField("remainder", remainder).Debug("Leftover Data(for debugging)")
 			continue
 		}
 
@@ -313,7 +312,7 @@ func (db *LocalNetDbImpl) RouterInfos() (routerInfos []routerInfo, err error) {
 				RI:      &riStruct,
 			})
 		} else {
-			log.Println("Skipped less-useful RouterInfo Capabilities:", riStruct.RouterCapabilities(), riStruct.RouterVersion())
+			lgr.WithField("path", path).WithField("capabilities", riStruct.RouterCapabilities()).WithField("version", riStruct.RouterVersion()).Debug("Skipped less-useful RouterInfo")
 		}
 	}
 

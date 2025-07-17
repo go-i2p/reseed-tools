@@ -2,7 +2,6 @@ package reseed
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,7 +19,7 @@ func Ping(urlInput string) (bool, error) {
 	if !strings.HasSuffix(urlInput, "i2pseeds.su3") {
 		urlInput = fmt.Sprintf("%s%s", urlInput, "i2pseeds.su3")
 	}
-	log.Println("Pinging:", urlInput)
+	lgr.WithField("url", urlInput).Debug("Pinging reseed server")
 	// Create HTTP request with proper User-Agent for I2P compatibility
 	req, err := http.NewRequest("GET", urlInput, nil)
 	if err != nil {
@@ -52,28 +51,28 @@ func trimPath(s string) string {
 // Creates daily ping status files in the content directory for status tracking and
 // web interface display. Files are named with host and date to prevent conflicts.
 func PingWriteContent(urlInput string) error {
-	log.Println("Calling PWC", urlInput)
+	lgr.WithField("url", urlInput).Debug("Calling PWC")
 	// Generate date stamp for daily ping file organization
 	date := time.Now().Format("2006-01-02")
 	u, err := url.Parse(urlInput)
 	if err != nil {
-		log.Println("PWC", err)
+		lgr.WithError(err).WithField("url", urlInput).Error("PWC URL parsing error")
 		return fmt.Errorf("PingWriteContent:%s", err)
 	}
 	// Create clean filename from host and date for ping result storage
 	path := trimPath(u.Host)
-	log.Println("Calling PWC path", path)
+	lgr.WithField("path", path).Debug("Calling PWC path")
 	BaseContentPath, _ := StableContentPath()
 	path = filepath.Join(BaseContentPath, path+"-"+date+".ping")
 	// Only ping if daily result file doesn't exist to prevent spam
 	if _, err := os.Stat(path); err != nil {
 		result, err := Ping(urlInput)
 		if result {
-			log.Printf("Ping: %s OK", urlInput)
+			lgr.WithField("url", urlInput).Debug("Ping: OK")
 			err := os.WriteFile(path, []byte("Alive: Status OK"), 0o644)
 			return err
 		} else {
-			log.Printf("Ping: %s %s", urlInput, err)
+			lgr.WithField("url", urlInput).WithError(err).Error("Ping: failed")
 			err := os.WriteFile(path, []byte("Dead: "+err.Error()), 0o644)
 			return err
 		}
@@ -101,7 +100,7 @@ var lastPing = yday()
 func PingEverybody() []string {
 	// Enforce rate limiting to prevent server abuse
 	if lastPing.After(yday()) {
-		log.Println("Your ping was rate-limited")
+		lgr.Debug("Your ping was rate-limited")
 		return nil
 	}
 	lastPing = time.Now()

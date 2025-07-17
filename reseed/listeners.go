@@ -2,13 +2,15 @@ package reseed
 
 import (
 	"crypto/tls"
-	"log"
 	"net"
 
 	"github.com/cretz/bine/tor"
 	"github.com/go-i2p/i2pkeys"
+	"github.com/go-i2p/logger"
 	"github.com/go-i2p/onramp"
 )
+
+var lgr = logger.GetGoI2PLogger()
 
 func (srv *Server) ListenAndServe() error {
 	addr := srv.Addr
@@ -54,7 +56,7 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 }
 
 func (srv *Server) ListenAndServeOnionTLS(startConf *tor.StartConf, listenConf *tor.ListenConf, certFile, keyFile string) error {
-	log.Println("Starting and registering OnionV3 HTTPS service, please wait a couple of minutes...")
+	lgr.WithField("service", "onionv3-https").Debug("Starting and registering OnionV3 HTTPS service, please wait a couple of minutes...")
 	var err error
 	srv.Onion, err = onramp.NewOnion("reseed")
 	if err != nil {
@@ -64,13 +66,13 @@ func (srv *Server) ListenAndServeOnionTLS(startConf *tor.StartConf, listenConf *
 	if err != nil {
 		return err
 	}
-	log.Printf("Onionv3 server started on https://%v.onion\n", srv.OnionListener.Addr().String())
+	lgr.WithField("service", "onionv3-https").WithField("address", srv.OnionListener.Addr().String()+".onion").WithField("protocol", "https").Debug("Onionv3 server started")
 
 	return srv.Serve(srv.OnionListener)
 }
 
 func (srv *Server) ListenAndServeOnion(startConf *tor.StartConf, listenConf *tor.ListenConf) error {
-	log.Println("Starting and registering OnionV3 HTTP service, please wait a couple of minutes...")
+	lgr.WithField("service", "onionv3-http").Debug("Starting and registering OnionV3 HTTP service, please wait a couple of minutes...")
 	var err error
 	srv.Onion, err = onramp.NewOnion("reseed")
 	if err != nil {
@@ -80,13 +82,13 @@ func (srv *Server) ListenAndServeOnion(startConf *tor.StartConf, listenConf *tor
 	if err != nil {
 		return err
 	}
-	log.Printf("Onionv3 server started on http://%v.onion\n", srv.OnionListener.Addr().String())
+	lgr.WithField("service", "onionv3-http").WithField("address", srv.OnionListener.Addr().String()+".onion").WithField("protocol", "http").Debug("Onionv3 server started")
 
 	return srv.Serve(srv.OnionListener)
 }
 
 func (srv *Server) ListenAndServeI2PTLS(samaddr string, I2PKeys i2pkeys.I2PKeys, certFile, keyFile string) error {
-	log.Println("Starting and registering I2P HTTPS service, please wait a couple of minutes...")
+	lgr.WithField("service", "i2p-https").WithField("sam_address", samaddr).Debug("Starting and registering I2P HTTPS service, please wait a couple of minutes...")
 	var err error
 	srv.Garlic, err = onramp.NewGarlic("reseed-tls", samaddr, onramp.OPT_WIDE)
 	if err != nil {
@@ -96,12 +98,12 @@ func (srv *Server) ListenAndServeI2PTLS(samaddr string, I2PKeys i2pkeys.I2PKeys,
 	if err != nil {
 		return err
 	}
-	log.Printf("I2P server started on https://%v\n", srv.I2PListener.Addr().(i2pkeys.I2PAddr).Base32())
+	lgr.WithField("service", "i2p-https").WithField("address", srv.I2PListener.Addr().(i2pkeys.I2PAddr).Base32()).WithField("protocol", "https").Debug("I2P server started")
 	return srv.Serve(srv.I2PListener)
 }
 
 func (srv *Server) ListenAndServeI2P(samaddr string, I2PKeys i2pkeys.I2PKeys) error {
-	log.Println("Starting and registering I2P service, please wait a couple of minutes...")
+	lgr.WithField("service", "i2p-http").WithField("sam_address", samaddr).Debug("Starting and registering I2P service, please wait a couple of minutes...")
 	var err error
 	srv.Garlic, err = onramp.NewGarlic("reseed", samaddr, onramp.OPT_WIDE)
 	if err != nil {
@@ -111,6 +113,6 @@ func (srv *Server) ListenAndServeI2P(samaddr string, I2PKeys i2pkeys.I2PKeys) er
 	if err != nil {
 		return err
 	}
-	log.Printf("I2P server started on http://%v.b32.i2p\n", srv.I2PListener.Addr().(i2pkeys.I2PAddr).Base32())
+	lgr.WithField("service", "i2p-http").WithField("address", srv.I2PListener.Addr().(i2pkeys.I2PAddr).Base32()+".b32.i2p").WithField("protocol", "http").Debug("I2P server started")
 	return srv.Serve(srv.I2PListener)
 }

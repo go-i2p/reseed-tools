@@ -39,6 +39,40 @@ make build
 sudo make install
 ```
 
+## Logging Configuration
+
+The reseed-tools uses structured logging with configurable verbosity levels via the `github.com/go-i2p/logger` package. Logging is controlled through environment variables:
+
+### Environment Variables
+
+- **`DEBUG_I2P`**: Controls logging verbosity levels
+  - `debug` - Enable debug level logging (most verbose)
+  - `warn` - Enable warning level logging
+  - `error` - Enable error level logging only
+  - Not set - Logging disabled (default)
+
+- **`WARNFAIL_I2P`**: Enable fast-fail mode for testing
+  - `true` - Warnings and errors become fatal for robust testing
+  - Not set - Normal operation (default)
+
+### Examples
+
+```bash
+# Enable debug logging
+export DEBUG_I2P=debug
+./reseed-tools reseed --signer=you@mail.i2p --netdb=/home/i2p/.i2p/netDb
+
+# Enable warning/error logging with fast-fail for testing
+export DEBUG_I2P=warn
+export WARNFAIL_I2P=true
+./reseed-tools reseed --signer=you@mail.i2p --netdb=/home/i2p/.i2p/netDb
+
+# Production mode (no logging)
+./reseed-tools reseed --signer=you@mail.i2p --netdb=/home/i2p/.i2p/netDb
+```
+
+The structured logging provides rich context for debugging I2P network operations, server startup, and file processing while maintaining zero performance impact in production when logging is disabled.
+
 ## Usage
 
 #### Debian/Ubuntu note:
@@ -73,4 +107,3 @@ reseed-tools reseed --signer=you@mail.i2p --netdb=/home/i2p/.i2p/netDb --port=84
 
 - **Usage** [More examples can be found here.](docs/EXAMPLES.md)
 - **Docker** [Docker examples can be found here](docs/DOCKER.md)
- 

@@ -7,7 +7,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,7 +25,7 @@ import (
 func NewShareCommand() *cli.Command {
 	ndb, err := getmeanetdb.WhereIstheNetDB()
 	if err != nil {
-		log.Fatal(err)
+		lgr.WithError(err).Fatal("Fatal error in share")
 	}
 	return &cli.Command{
 		Name:   "share",
@@ -80,9 +79,9 @@ func (s *sharer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p[0] != s.Password {
 		return
 	}
-	log.Println("Path", r.URL.Path)
+	lgr.WithField("path", r.URL.Path).Debug("Request path")
 	if strings.HasSuffix(r.URL.Path, "tar.gz") {
-		log.Println("Serving netdb")
+		lgr.Debug("Serving netdb")
 		archive, err := walker(s.Path)
 		if err != nil {
 			return
@@ -161,15 +160,15 @@ func walker(netDbDir string) (*bytes.Buffer, error) {
 		}
 		defer fr.Close()
 		if h, err := tar.FileInfoHeader(info, new_path); err != nil {
-			log.Fatalln(err)
+			lgr.WithError(err).Fatal("Fatal error in share")
 		} else {
 			h.Name = new_path
 			if err = tw.WriteHeader(h); err != nil {
-				log.Fatalln(err)
+				lgr.WithError(err).Fatal("Fatal error in share")
 			}
 		}
 		if _, err := io.Copy(tw, fr); err != nil {
-			log.Fatalln(err)
+			lgr.WithError(err).Fatal("Fatal error in share")
 		}
 		return nil
 	}

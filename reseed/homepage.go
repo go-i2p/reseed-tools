@@ -2,7 +2,6 @@ package reseed
 
 import (
 	"embed"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -119,17 +118,17 @@ func (srv *Server) HandleARealBrowser(w http.ResponseWriter, r *http.Request) {
 	}
 	lang, _ := r.Cookie("lang")
 	accept := r.Header.Get("Accept-Language")
-	log.Printf("lang: '%s', accept: '%s'\n", lang, accept)
+	lgr.WithField("lang", lang).WithField("accept", accept).Debug("Processing language preferences")
 	for name, values := range r.Header {
 		// Loop over all values for the name.
 		for _, value := range values {
-			log.Printf("name: '%s', value: '%s'\n", name, value)
+			lgr.WithField("header_name", name).WithField("header_value", value).Debug("Request header")
 		}
 	}
 	tag, _ := language.MatchStrings(matcher, lang.String(), accept)
-	log.Printf("tag: '%s'\n", tag)
+	lgr.WithField("tag", tag).Debug("Matched language tag")
 	base, _ := tag.Base()
-	log.Printf("base: '%s'\n", base)
+	lgr.WithField("base", base).Debug("Base language")
 
 	if strings.HasSuffix(r.URL.Path, "style.css") {
 		w.Header().Set("Content-Type", "text/css")

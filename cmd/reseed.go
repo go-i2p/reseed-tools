@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"crypto/rsa"
+	"log"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	//"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"os"
 	"runtime"
@@ -21,6 +21,7 @@ import (
 	"github.com/cretz/bine/torutil"
 	"github.com/cretz/bine/torutil/ed25519"
 	"github.com/go-i2p/i2pkeys"
+	"github.com/go-i2p/logger"
 	"github.com/go-i2p/onramp"
 	"github.com/go-i2p/sam3"
 	"github.com/otiai10/copy"
@@ -30,6 +31,8 @@ import (
 
 	"github.com/go-i2p/checki2cp/getmeanetdb"
 )
+
+var lgr = logger.GetGoI2PLogger()
 
 func getDefaultSigner() string {
 	intentionalsigner := os.Getenv("RESEED_EMAIL")
@@ -64,7 +67,7 @@ func providedReseeds(c *cli.Context) []string {
 func NewReseedCommand() *cli.Command {
 	ndb, err := getmeanetdb.WhereIstheNetDB()
 	if err != nil {
-		log.Fatal(err)
+		lgr.WithError(err).Fatal("Failed to locate NetDB")
 	}
 	return &cli.Command{
 		Name:   "reseed",
@@ -360,7 +363,7 @@ func setupRemoteNetDBSharing(c *cli.Context) error {
 		for i := range count {
 			err := downloadRemoteNetDB(c.String("share-peer"), c.String("share-password"), c.String("netdb"), c.String("samaddr"))
 			if err != nil {
-				log.Println("Error downloading remote netDb,", err, "retrying in 10 seconds", i, "attempts remaining")
+				lgr.WithError(err).WithField("attempt", i).WithField("attempts_remaining", 10-i).Warn("Error downloading remote netDb, retrying in 10 seconds")
 				time.Sleep(time.Second * 10)
 			} else {
 				break
@@ -413,12 +416,12 @@ func configureTLSCertificates(c *cli.Context) (*tlsConfiguration, error) {
 				acmeserver := c.String("acmeserver")
 				err := checkUseAcmeCert(config.tlsHost, "", acmeserver, &config.tlsCert, &config.tlsKey, auto)
 				if err != nil {
-					log.Fatalln(err)
+					lgr.WithError(err).Fatal("Fatal error")
 				}
 			} else {
 				err := checkOrNewTLSCert(config.tlsHost, &config.tlsCert, &config.tlsKey, auto)
 				if err != nil {
-					log.Fatalln(err)
+					lgr.WithError(err).Fatal("Fatal error")
 				}
 			}
 		}
@@ -435,7 +438,7 @@ func setupI2PKeys(c *cli.Context, tlsConfig *tlsConfiguration) (i2pkeys.I2PKeys,
 		var err error
 		i2pkey, err = LoadKeys("reseed.i2pkeys", c)
 		if err != nil {
-			log.Fatalln(err)
+			lgr.WithError(err).Fatal("Fatal error")
 		}
 
 		if tlsConfig.i2pTlsHost == "" {
@@ -456,7 +459,7 @@ func setupI2PKeys(c *cli.Context, tlsConfig *tlsConfiguration) (i2pkeys.I2PKeys,
 			if !ignore {
 				err := checkOrNewTLSCert(tlsConfig.i2pTlsHost, &tlsConfig.i2pTlsCert, &tlsConfig.i2pTlsKey, auto)
 				if err != nil {
-					log.Fatalln(err)
+					lgr.WithError(err).Fatal("Fatal error")
 				}
 			}
 		}
@@ -474,12 +477,12 @@ func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
 		if _, err = os.Stat(c.String("onionKey")); err == nil {
 			ok, err = ioutil.ReadFile(c.String("onionKey"))
 			if err != nil {
-				log.Fatalln(err.Error())
+				lgr.WithError(err).Fatal("Fatal error")
 			}
 		} else {
 			key, err := ed25519.GenerateKey(nil)
 			if err != nil {
-				log.Fatalln(err.Error())
+				lgr.WithError(err).Fatal("Fatal error")
 			}
 			ok = []byte(key.PrivateKey())
 		}
@@ -490,7 +493,7 @@ func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
 
 		err = ioutil.WriteFile(c.String("onionKey"), ok, 0o644)
 		if err != nil {
-			log.Fatalln(err.Error())
+			lgr.WithError(err).Fatal("Fatal error")
 		}
 
 		if tlsConfig.onionTlsHost != "" {
@@ -507,7 +510,7 @@ func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
 			if !ignore {
 				err := checkOrNewTLSCert(tlsConfig.onionTlsHost, &tlsConfig.onionTlsCert, &tlsConfig.onionTlsKey, auto)
 				if err != nil {
-					log.Fatalln(err)
+					lgr.WithError(err).Fatal("Fatal error")
 				}
 			}
 		}
@@ -532,7 +535,7 @@ func setupSigningConfiguration(c *cli.Context, signerID string) (time.Duration, 
 	auto := c.Bool("yes")
 	privKey, err := getOrNewSigningCert(&signerKey, signerID, auto)
 	if err != nil {
-		log.Fatalln(err)
+		lgr.WithError(err).Fatal("Fatal error")
 	}
 
 	return reloadIntvl, privKey, nil
@@ -557,7 +560,7 @@ func initializeReseeder(c *cli.Context, netdbDir, signerID string, privKey *rsa.
 // startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS).
 func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
 	if c.Bool("onion") {
-		log.Printf("Onion server starting\n")
+		lgr.WithField("service", "onion").Debug("Onion server starting")
 		if tlsConfig.tlsHost != "" && tlsConfig.tlsCert != "" && tlsConfig.tlsKey != "" {
 			go reseedOnion(c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder)
 		} else {
@@ -565,7 +568,7 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 		}
 	}
 	if c.Bool("i2p") {
-		log.Printf("I2P server starting\n")
+		lgr.WithField("service", "i2p").Debug("I2P server starting")
 		if tlsConfig.tlsHost != "" && tlsConfig.tlsCert != "" && tlsConfig.tlsKey != "" {
 			go reseedI2P(c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder)
 		} else {
@@ -573,10 +576,10 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 		}
 	}
 	if !c.Bool("trustProxy") {
-		log.Printf("HTTPS server starting\n")
+		lgr.WithField("service", "https").Debug("HTTPS server starting")
 		reseedHTTPS(c, tlsConfig.tlsCert, tlsConfig.tlsKey, reseeder)
 	} else {
-		log.Printf("HTTP server starting on\n")
+		lgr.WithField("service", "http").Debug("HTTP server starting")
 		reseedHTTP(c, reseeder)
 	}
 }
@@ -602,13 +605,13 @@ func reseedHTTPS(c *cli.Context, tlsCert, tlsKey string, reseeder *reseed.Reseed
 			var mem runtime.MemStats
 			for range time.Tick(c.Duration("stats")) {
 				runtime.ReadMemStats(&mem)
-				log.Printf("TotalAllocs: %d Kb, Allocs: %d Kb, Mallocs: %d, NumGC: %d", mem.TotalAlloc/1024, mem.Alloc/1024, mem.Mallocs, mem.NumGC)
+				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
 			}
 		}()
 	}
-	log.Printf("HTTPS server started on %s\n", server.Addr)
+	lgr.WithField("address", server.Addr).Debug("HTTPS server started")
 	if err := server.ListenAndServeTLS(tlsCert, tlsKey); err != nil {
-		log.Fatalln(err)
+		lgr.WithError(err).Fatal("Fatal error")
 	}
 }
 
@@ -633,13 +636,13 @@ func reseedHTTP(c *cli.Context, reseeder *reseed.ReseederImpl) {
 			var mem runtime.MemStats
 			for range time.Tick(c.Duration("stats")) {
 				runtime.ReadMemStats(&mem)
-				log.Printf("TotalAllocs: %d Kb, Allocs: %d Kb, Mallocs: %d, NumGC: %d", mem.TotalAlloc/1024, mem.Alloc/1024, mem.Mallocs, mem.NumGC)
+				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
 			}
 		}()
 	}
-	log.Printf("HTTP server started on %s\n", server.Addr)
+	lgr.WithField("address", server.Addr).Debug("HTTP server started")
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatalln(err)
+		lgr.WithError(err).Fatal("Fatal error")
 	}
 }
 
@@ -662,19 +665,19 @@ func reseedOnion(c *cli.Context, onionTlsCert, onionTlsKey string, reseeder *res
 			var mem runtime.MemStats
 			for range time.Tick(c.Duration("stats")) {
 				runtime.ReadMemStats(&mem)
-				log.Printf("TotalAllocs: %d Kb, Allocs: %d Kb, Mallocs: %d, NumGC: %d", mem.TotalAlloc/1024, mem.Alloc/1024, mem.Mallocs, mem.NumGC)
+				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
 			}
 		}()
 	}
 	port, err := strconv.Atoi(c.String("port"))
 	if err != nil {
-		log.Fatalln(err.Error())
+		lgr.WithError(err).Fatal("Fatal error")
 	}
 	port += 1
 	if _, err := os.Stat(c.String("onionKey")); err == nil {
 		ok, err := ioutil.ReadFile(c.String("onionKey"))
 		if err != nil {
-			log.Fatalln(err.Error())
+			lgr.WithError(err).Fatal("Fatal error")
 		} else {
 			if onionTlsCert != "" && onionTlsKey != "" {
 				tlc := &tor.ListenConf{
@@ -686,7 +689,7 @@ func reseedOnion(c *cli.Context, onionTlsCert, onionTlsKey string, reseeder *res
 					DiscardKey:   false,
 				}
 				if err := server.ListenAndServeOnionTLS(nil, tlc, onionTlsCert, onionTlsKey); err != nil {
-					log.Fatalln(err)
+					lgr.WithError(err).Fatal("Fatal error")
 				}
 			} else {
 				tlc := &tor.ListenConf{
@@ -698,7 +701,7 @@ func reseedOnion(c *cli.Context, onionTlsCert, onionTlsKey string, reseeder *res
 					DiscardKey:   false,
 				}
 				if err := server.ListenAndServeOnion(nil, tlc); err != nil {
-					log.Fatalln(err)
+					lgr.WithError(err).Fatal("Fatal error")
 				}
 
 			}
@@ -712,10 +715,10 @@ func reseedOnion(c *cli.Context, onionTlsCert, onionTlsKey string, reseeder *res
 			DiscardKey:   false,
 		}
 		if err := server.ListenAndServeOnion(nil, tlc); err != nil {
-			log.Fatalln(err)
+			lgr.WithError(err).Fatal("Fatal error")
 		}
 	}
-	log.Printf("Onion server started on %s\n", server.Addr)
+	lgr.WithField("address", server.Addr).Debug("Onion server started")
 }
 
 func reseedI2P(c *cli.Context, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
@@ -739,26 +742,26 @@ func reseedI2P(c *cli.Context, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys
 			var mem runtime.MemStats
 			for range time.Tick(c.Duration("stats")) {
 				runtime.ReadMemStats(&mem)
-				log.Printf("TotalAllocs: %d Kb, Allocs: %d Kb, Mallocs: %d, NumGC: %d", mem.TotalAlloc/1024, mem.Alloc/1024, mem.Mallocs, mem.NumGC)
+				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
 			}
 		}()
 	}
 	port, err := strconv.Atoi(c.String("port"))
 	if err != nil {
-		log.Fatalln(err.Error())
+		lgr.WithError(err).Fatal("Fatal error")
 	}
 	port += 1
 	if i2pTlsCert != "" && i2pTlsKey != "" {
 		if err := server.ListenAndServeI2PTLS(c.String("samaddr"), i2pIdentKey, i2pTlsCert, i2pTlsKey); err != nil {
-			log.Fatalln(err)
+			lgr.WithError(err).Fatal("Fatal error")
 		}
 	} else {
 		if err := server.ListenAndServeI2P(c.String("samaddr"), i2pIdentKey); err != nil {
-			log.Fatalln(err)
+			lgr.WithError(err).Fatal("Fatal error")
 		}
 	}
 
-	log.Printf("Onion server started on %s\n", server.Addr)
+	lgr.WithField("address", server.Addr).Debug("Onion server started")
 }
 
 func getSupplementalNetDb(remote, password, path, samaddr string) {
