@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/common/router_info"
@@ -52,8 +53,8 @@ func (p Peer) Hash() int {
 type ReseederImpl struct {
 	// netdb provides access to the local router information database
 	netdb *LocalNetDbImpl
-	// su3s channel buffers pre-built SU3 files for efficient serving
-	su3s chan [][]byte
+	// su3s stores pre-built SU3 files for efficient serving using atomic operations
+	su3s atomic.Value // stores [][]byte
 
 	// SigningKey contains the RSA private key for SU3 file cryptographic signing
 	SigningKey *rsa.PrivateKey
@@ -71,25 +72,18 @@ type ReseederImpl struct {
 // It initializes the service with standard parameters: 77 router infos per SU3 file
 // and 90-hour rebuild intervals to balance freshness with server performance.
 func NewReseeder(netdb *LocalNetDbImpl) *ReseederImpl {
-	return &ReseederImpl{
+	rs := &ReseederImpl{
 		netdb:           netdb,
-		su3s:            make(chan [][]byte),
 		NumRi:           77,
 		RebuildInterval: 90 * time.Hour,
 	}
+	// Initialize with empty slice to prevent nil panics
+	rs.su3s.Store([][]byte{})
+	return rs
 }
 
 func (rs *ReseederImpl) Start() chan bool {
-	// atomic swapper
-	go func() {
-		var m [][]byte
-		for {
-			select {
-			case m = <-rs.su3s:
-			case rs.su3s <- m:
-			}
-		}
-	}()
+	// No need for atomic swapper - atomic.Value handles concurrency
 
 	// init the cache
 	err := rs.rebuild()
@@ -151,7 +145,7 @@ func (rs *ReseederImpl) rebuild() error {
 	}
 
 	// use this new set of su3s
-	rs.su3s <- newSu3s
+	rs.su3s.Store(newSu3s)
 
 	lgr.WithField("operation", "rebuild").Debug("Done rebuilding.")
 
@@ -218,8 +212,7 @@ func (rs *ReseederImpl) su3Builder(in <-chan []routerInfo) <-chan *su3.File {
 }
 
 func (rs *ReseederImpl) PeerSu3Bytes(peer Peer) ([]byte, error) {
-	m := <-rs.su3s
-	defer func() { rs.su3s <- m }()
+	m := rs.su3s.Load().([][]byte)
 
 	if len(m) == 0 {
 		return nil, errors.New("404")
