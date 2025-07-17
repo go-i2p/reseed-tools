@@ -57,6 +57,9 @@ func providedReseeds(c *cli.Context) []string {
 }
 
 // NewReseedCommand creates a new CLI command for starting a reseed server.
+// A reseed server provides bootstrap router information to help new I2P nodes join the network.
+// The server supports multiple protocols (HTTP, HTTPS, I2P, Tor) and provides signed SU3 files
+// containing router information for network bootstrapping.
 func NewReseedCommand() *cli.Command {
 	ndb, err := getmeanetdb.WhereIstheNetDB()
 	if err != nil {
@@ -207,12 +210,17 @@ func NewReseedCommand() *cli.Command {
 	}
 }
 
+// CreateEepServiceKey generates new I2P keys for eepSite (hidden service) operation.
+// It connects to the I2P SAM interface and creates a fresh key pair for hosting services
+// on the I2P network. Returns the generated keys or an error if SAM connection fails.
 func CreateEepServiceKey(c *cli.Context) (i2pkeys.I2PKeys, error) {
+	// Connect to I2P SAM interface for key generation
 	sam, err := sam3.NewSAM(c.String("samaddr"))
 	if err != nil {
 		return i2pkeys.I2PKeys{}, err
 	}
 	defer sam.Close()
+	// Generate new I2P destination keys
 	k, err := sam.NewKeys()
 	if err != nil {
 		return i2pkeys.I2PKeys{}, err
@@ -220,7 +228,11 @@ func CreateEepServiceKey(c *cli.Context) (i2pkeys.I2PKeys, error) {
 	return k, err
 }
 
+// LoadKeys loads existing I2P keys from file or creates new ones if the file doesn't exist.
+// This function handles the key management lifecycle for I2P services, automatically
+// generating keys when needed and persisting them for reuse across restarts.
 func LoadKeys(keysPath string, c *cli.Context) (i2pkeys.I2PKeys, error) {
+	// Check if keys file exists, create new keys if not found
 	if _, err := os.Stat(keysPath); os.IsNotExist(err) {
 		keys, err := CreateEepServiceKey(c)
 		if err != nil {

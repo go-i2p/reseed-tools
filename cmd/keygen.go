@@ -1,3 +1,7 @@
+// Package cmd provides command-line interface implementations for reseed-tools.
+// This package contains all CLI commands for key generation, server operation, file verification,
+// and network database sharing operations. Each command is self-contained and provides
+// comprehensive functionality for I2P network reseed operations.
 package cmd
 
 import (
@@ -6,7 +10,9 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// NewKeygenCommand creates a new CLI command for generating keys.
+// NewKeygenCommand creates a new CLI command for generating cryptographic keys.
+// It supports generating signing keys for SU3 file signing and TLS certificates for HTTPS serving.
+// Users can specify either --signer for SU3 signing keys or --tlsHost for TLS certificates.
 func NewKeygenCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "keygen",
@@ -30,11 +36,13 @@ func keygenAction(c *cli.Context) error {
 	tlsHost := c.String("tlsHost")
 	trustProxy := c.Bool("trustProxy")
 
+	// Validate that at least one key generation option is specified
 	if signerID == "" && tlsHost == "" {
 		fmt.Println("You must specify either --tlsHost or --signer")
 		return fmt.Errorf("You must specify either --tlsHost or --signer")
 	}
 
+	// Generate signing certificate if signer ID is provided
 	if signerID != "" {
 		if err := createSigningCertificate(signerID); nil != err {
 			fmt.Println(err)
@@ -42,6 +50,7 @@ func keygenAction(c *cli.Context) error {
 		}
 	}
 
+	// Generate TLS certificate if host is provided and proxy trust is enabled
 	if trustProxy {
 		if tlsHost != "" {
 			if err := createTLSCertificate(tlsHost); nil != err {

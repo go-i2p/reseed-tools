@@ -19,7 +19,9 @@ import (
 	"github.com/go-i2p/onramp"
 )
 
-// NewShareCommand creates a new CLI Command for sharing the netDb over I2P with a password.
+// NewShareCommand creates a new CLI command for sharing the netDb over I2P with password protection.
+// This command sets up a secure file sharing server that allows remote I2P routers to access
+// and download router information from the local netDb directory for network synchronization.
 // Can be used to combine the local netDb with the netDb of a remote I2P router.
 func NewShareCommand() *cli.Command {
 	ndb, err := getmeanetdb.WhereIstheNetDB()
@@ -59,6 +61,9 @@ func NewShareCommand() *cli.Command {
 	}
 }
 
+// sharer implements a password-protected HTTP file server for netDb sharing.
+// It wraps the standard HTTP file system with authentication middleware to ensure
+// only authorized clients can access router information over the I2P network.
 type sharer struct {
 	http.FileSystem
 	http.Handler
@@ -67,6 +72,7 @@ type sharer struct {
 }
 
 func (s *sharer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Extract password from custom reseed-password header
 	p, ok := r.Header[http.CanonicalHeaderKey("reseed-password")]
 	if !ok {
 		return
@@ -87,51 +93,68 @@ func (s *sharer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.Handler.ServeHTTP(w, r)
 }
 
+// Sharer creates a new HTTP file server for sharing netDb files over I2P.
+// It sets up a password-protected file system server that can serve router information
+// to other I2P nodes. The netDbDir parameter specifies the directory containing router files.
 func Sharer(netDbDir, password string) *sharer {
 	fileSystem := &sharer{
 		FileSystem: http.Dir(netDbDir),
 		Path:       netDbDir,
 		Password:   password,
 	}
+	// Configure HTTP file server for the netDb directory
 	fileSystem.Handler = http.FileServer(fileSystem.FileSystem)
 	return fileSystem
 }
 
 func shareAction(c *cli.Context) error {
+	// Convert netDb path to absolute path for consistent file access
 	netDbDir, err := filepath.Abs(c.String("netdb"))
 	if err != nil {
 		return err
 	}
+	// Create password-protected file server for netDb sharing
 	httpFs := Sharer(netDbDir, c.String("share-password"))
+	// Initialize I2P garlic routing for hidden service hosting
 	garlic, err := onramp.NewGarlic("reseed", c.String("samaddr"), onramp.OPT_WIDE)
 	if err != nil {
 		return err
 	}
 	defer garlic.Close()
 
+	// Create I2P listener for incoming connections
 	garlicListener, err := garlic.Listen()
 	if err != nil {
 		return err
 	}
 	defer garlicListener.Close()
 
+	// Start HTTP server over I2P network
 	return http.Serve(garlicListener, httpFs)
 }
 
+// walker creates a tar archive of all files in the specified netDb directory.
+// This function recursively traverses the directory structure and packages all router
+// information files into a compressed tar format for efficient network transfer.
 func walker(netDbDir string) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
+	// Create tar writer for archive creation
 	tw := tar.NewWriter(&buf)
 	walkFn := func(path string, info os.FileInfo, err error) error {
+		// Handle filesystem errors during directory traversal
 		if err != nil {
 			return err
 		}
+		// Skip directories, only process regular files
 		if info.Mode().IsDir() {
 			return nil
 		}
+		// Calculate relative path within netDb directory
 		new_path := path[len(netDbDir):]
 		if len(new_path) == 0 {
 			return nil
 		}
+		// Open file for reading into tar archive
 		fr, err := os.Open(path)
 		if err != nil {
 			return err

@@ -7,11 +7,15 @@ import (
 	"i2pgit.org/idk/reseed-tools/reseed"
 )
 
+// NewVersionCommand creates a new CLI command for displaying the reseed-tools version.
+// This command provides version information for troubleshooting and compatibility checking
+// with other I2P network components and reseed infrastructure.
 func NewVersionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "version",
 		Usage: "Print the version number of reseed-tools",
 		Action: func(c *cli.Context) error {
+			// Print the current version from reseed package constants
 			fmt.Printf("%s\n", reseed.Version)
 			return nil
 		},

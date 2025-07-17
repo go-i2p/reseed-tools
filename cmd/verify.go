@@ -13,20 +13,26 @@ import (
 	"i2pgit.org/idk/reseed-tools/su3"
 )
 
+// I2PHome returns the I2P configuration directory path for the current system.
+// It checks multiple standard locations including environment variables and default
+// directories to locate I2P configuration files and certificates for SU3 verification.
 func I2PHome() string {
+	// Check I2P environment variable first for custom installations
 	envCheck := os.Getenv("I2P")
 	if envCheck != "" {
 		return envCheck
 	}
-	// get the current user home
+	// Get current user's home directory for standard I2P paths
 	usr, err := user.Current()
 	if nil != err {
 		panic(err)
 	}
+	// Check for i2p-config directory (common on Linux distributions)
 	sysCheck := filepath.Join(usr.HomeDir, "i2p-config")
 	if _, err := os.Stat(sysCheck); nil == err {
 		return sysCheck
 	}
+	// Check for standard i2p directory in user home
 	usrCheck := filepath.Join(usr.HomeDir, "i2p")
 	if _, err := os.Stat(usrCheck); nil == err {
 		return usrCheck
@@ -34,6 +40,9 @@ func I2PHome() string {
 	return ""
 }
 
+// NewSu3VerifyCommand creates a new CLI command for verifying SU3 file signatures.
+// This command validates the cryptographic integrity of SU3 files using the embedded
+// certificates and signatures, ensuring files haven't been tampered with during distribution.
 func NewSu3VerifyCommand() *cli.Command {
 	return &cli.Command{
 		Name:        "verify",

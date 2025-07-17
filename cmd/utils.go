@@ -53,8 +53,10 @@ func signerFile(signerID string) string {
 }
 
 func getOrNewSigningCert(signerKey *string, signerID string, auto bool) (*rsa.PrivateKey, error) {
+	// Check if signing key file exists before attempting to load
 	if _, err := os.Stat(*signerKey); nil != err {
 		fmt.Printf("Unable to read signing key '%s'\n", *signerKey)
+		// Prompt user for key generation in interactive mode
 		if !auto {
 			fmt.Printf("Would you like to generate a new signing key for %s? (y or n): ", signerID)
 			reader := bufio.NewReader(os.Stdin)
@@ -63,10 +65,12 @@ func getOrNewSigningCert(signerKey *string, signerID string, auto bool) (*rsa.Pr
 				return nil, fmt.Errorf("A signing key is required")
 			}
 		}
+		// Generate new signing certificate if user confirmed or auto mode
 		if err := createSigningCertificate(signerID); nil != err {
 			return nil, err
 		}
 
+		// Update key path to point to newly generated certificate
 		*signerKey = signerFile(signerID) + ".pem"
 	}
 
@@ -74,6 +78,7 @@ func getOrNewSigningCert(signerKey *string, signerID string, auto bool) (*rsa.Pr
 }
 
 func checkUseAcmeCert(tlsHost, signer, cadirurl string, tlsCert, tlsKey *string, auto bool) error {
+	// Check existence of both TLS certificate and private key files
 	_, certErr := os.Stat(*tlsCert)
 	_, keyErr := os.Stat(*tlsKey)
 	if certErr != nil || keyErr != nil {
@@ -259,20 +264,24 @@ func checkOrNewTLSCert(tlsHost string, tlsCert, tlsKey *string, auto bool) error
 	return nil
 }
 
+// createSigningCertificate generates a new RSA private key and self-signed certificate for SU3 signing.
+// This function creates the cryptographic materials needed to sign SU3 files for distribution
+// over the I2P network. The generated certificate is valid for 10 years and uses 4096-bit RSA keys.
 func createSigningCertificate(signerID string) error {
-	// generate private key
+	// Generate 4096-bit RSA private key for strong cryptographic security
 	fmt.Println("Generating signing keys. This may take a minute...")
 	signerKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return err
 	}
 
+	// Create self-signed certificate using SU3 certificate standards
 	signerCert, err := su3.NewSigningCertificate(signerID, signerKey)
 	if nil != err {
 		return err
 	}
 
-	// save cert
+	// Save certificate to disk in PEM format for verification use
 	certFile := signerFile(signerID) + ".crt"
 	certOut, err := os.Create(certFile)
 	if err != nil {
@@ -282,7 +291,7 @@ func createSigningCertificate(signerID string) error {
 	certOut.Close()
 	fmt.Println("\tSigning certificate saved to:", certFile)
 
-	// save signing private key
+	// Save signing private key in PKCS#1 PEM format
 	privFile := signerFile(signerID) + ".pem"
 	keyOut, err := os.OpenFile(privFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -331,19 +340,24 @@ func createTLSCertificate(host string) error {
 	return CreateTLSCertificate(host)
 }
 
+// CreateTLSCertificate generates a new ECDSA private key and self-signed TLS certificate.
+// This function creates cryptographic materials for HTTPS server operation, using P-384 elliptic
+// curve cryptography for efficient and secure TLS connections. The certificate is valid for the specified hostname.
 func CreateTLSCertificate(host string) error {
+	// Generate P-384 ECDSA private key for TLS encryption
 	fmt.Println("Generating TLS keys. This may take a minute...")
 	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		return err
 	}
 
+	// Create self-signed TLS certificate for the specified hostname
 	tlsCert, err := reseed.NewTLSCertificate(host, priv)
 	if nil != err {
 		return err
 	}
 
-	// save the TLS certificate
+	// Save TLS certificate to disk in PEM format for server use
 	certOut, err := os.Create(host + ".crt")
 	if err != nil {
 		return fmt.Errorf("failed to open %s for writing: %s", host+".crt", err)
