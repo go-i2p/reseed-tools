@@ -90,6 +90,9 @@ func yday() time.Time {
 	return yesterday
 }
 
+// lastPing tracks the timestamp of the last successful ping operation for rate limiting.
+// This prevents excessive server polling by ensuring ping operations only occur once
+// per 24-hour period, respecting reseed server resources and network bandwidth.
 var lastPing = yday()
 
 // PingEverybody tests all known reseed servers and returns their status results.

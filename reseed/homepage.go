@@ -13,6 +13,10 @@ import (
 	"golang.org/x/text/language"
 )
 
+// f contains the embedded static content files for the reseed server web interface.
+// This includes HTML templates, CSS stylesheets, JavaScript files, and localized content
+// for serving the homepage and user interface to reseed service clients.
+//
 //go:embed content
 var f embed.FS
 
@@ -36,8 +40,14 @@ var SupportedLanguages = []language.Tag{
 }
 
 var (
+	// CachedLanguagePages stores pre-processed language-specific content pages for performance.
+	// Keys are language directory paths and values are rendered HTML content to avoid
+	// repeated markdown processing on each request for better response times.
 	CachedLanguagePages = map[string]string{}
-	CachedDataPages     = map[string][]byte{}
+	// CachedDataPages stores static file content in memory for faster serving.
+	// Keys are file paths and values are raw file content bytes to reduce filesystem I/O
+	// and improve performance for frequently accessed static resources.
+	CachedDataPages = map[string][]byte{}
 )
 
 // StableContentPath returns the path to static content files for the reseed server homepage.
@@ -57,8 +67,14 @@ func StableContentPath() (string, error) {
 	return BaseContentPath, ContentPathError
 }
 
+// matcher provides language matching functionality for reseed server internationalization.
+// It uses the SupportedLanguages list to match client browser language preferences
+// with available localized content for optimal user experience.
 var matcher = language.NewMatcher(SupportedLanguages)
 
+// header contains the standard HTML document header for reseed server web pages.
+// This template includes essential meta tags, CSS stylesheet links, and JavaScript
+// imports needed for consistent styling and functionality across all served pages.
 var header = []byte(`<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -69,9 +85,15 @@ var header = []byte(`<!DOCTYPE html>
   </head>
   <body>`)
 
+// footer contains the closing HTML tags for reseed server web pages.
+// This template ensures proper document structure termination for all served content
+// and maintains valid HTML5 compliance across the web interface.
 var footer = []byte(`  </body>
 </html>`)
 
+// md provides configured markdown processor for reseed server content rendering.
+// It supports XHTML output and embedded HTML for converting markdown files to
+// properly formatted web content with security and standards compliance.
 var md = markdown.New(markdown.XHTMLOutput(true), markdown.HTML(true))
 
 // ContentPath determines the filesystem path where reseed server content should be stored.
@@ -144,6 +166,9 @@ func (srv *Server) HandleARealBrowser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleAFile serves static files from the reseed server content directory with caching.
+// It loads files from the filesystem on first access and caches them in memory for
+// improved performance on subsequent requests, supporting CSS, JavaScript, and image files.
 func handleAFile(w http.ResponseWriter, dirPath, file string) {
 	BaseContentPath, _ := StableContentPath()
 	file = filepath.Join(dirPath, file)
@@ -161,6 +186,9 @@ func handleAFile(w http.ResponseWriter, dirPath, file string) {
 	}
 }
 
+// handleALocalizedFile processes and serves language-specific content with markdown rendering.
+// It reads markdown files from language subdirectories, converts them to HTML, and caches
+// the results for efficient serving of multilingual reseed server interface content.
 func handleALocalizedFile(w http.ResponseWriter, dirPath string) {
 	if _, prs := CachedLanguagePages[dirPath]; !prs {
 		BaseContentPath, _ := StableContentPath()

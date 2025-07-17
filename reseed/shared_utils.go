@@ -7,8 +7,9 @@ import (
 	"strings"
 )
 
-// AllReseeds contains the list of all available reseed servers.
-// Moved from: ping.go
+// AllReseeds contains the comprehensive list of known I2P reseed server URLs.
+// These servers provide bootstrap router information for new I2P nodes to join the network.
+// The list is used for ping testing and fallback reseed operations when needed.
 var AllReseeds = []string{
 	"https://banana.incognet.io/",
 	"https://i2p.novg.net/",
@@ -23,8 +24,9 @@ var AllReseeds = []string{
 	"https://www2.mk16.de/",
 }
 
-// SignerFilenameFromID creates a filename-safe version of a signer ID.
-// Moved from: utils.go
+// SignerFilenameFromID converts a signer ID into a filesystem-safe filename.
+// Replaces '@' symbols with '_at_' to create valid filenames for certificate storage.
+// This ensures consistent file naming across different operating systems and filesystems.
 func SignerFilenameFromID(signerID string) string {
 	return strings.Replace(signerID, "@", "_at_", 1)
 }

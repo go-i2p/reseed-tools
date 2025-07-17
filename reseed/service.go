@@ -18,6 +18,9 @@ import (
 	"i2pgit.org/idk/reseed-tools/su3"
 )
 
+// routerInfo holds metadata and content for an individual I2P router information file.
+// Contains the router filename, modification time, raw data, and parsed RouterInfo structure
+// used for reseed bundle generation and network database management operations.
 type routerInfo struct {
 	Name    string
 	ModTime time.Time
@@ -317,6 +320,9 @@ func (db *LocalNetDbImpl) RouterInfos() (routerInfos []routerInfo, err error) {
 	return
 }
 
+// fanIn multiplexes multiple SU3 file channels into a single output channel.
+// This function implements the fan-in concurrency pattern to efficiently merge
+// multiple concurrent SU3 file generation streams for balanced load distribution.
 func fanIn(inputs ...<-chan *su3.File) <-chan *su3.File {
 	out := make(chan *su3.File, len(inputs))
 
