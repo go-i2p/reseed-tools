@@ -23,28 +23,41 @@ import (
 
 // Constants moved to constants.go
 
+// Server represents a complete reseed server instance with multi-protocol support.
+// It provides HTTP/HTTPS reseed services over clearnet, I2P, and Tor networks with
+// rate limiting, blacklisting, and comprehensive security features for distributing
+// router information to bootstrap new I2P nodes joining the network.
 type Server struct {
 	*http.Server
 
+	// Reseeder handles the core reseed functionality and SU3 file generation
 	Reseeder  *ReseederImpl
+	// Blacklist manages IP-based access control for security
 	Blacklist *Blacklist
 
+	// ServerListener handles standard HTTP/HTTPS connections
 	ServerListener net.Listener
 
-	// I2P Listener
+	// I2P Listener configuration for serving over I2P network
 	Garlic      *onramp.Garlic
 	I2PListener net.Listener
 
-	// Tor Listener
+	// Tor Listener configuration for serving over Tor network
 	OnionListener net.Listener
 	Onion         *onramp.Onion
 
+	// Rate limiting configuration for request throttling
 	RequestRateLimit int
 	WebRateLimit     int
+	// Thread-safe tracking of acceptable client connection timing
 	acceptables      map[string]time.Time
 	acceptablesMutex sync.RWMutex
 }
 
+// NewServer creates a new reseed server instance with secure TLS configuration.
+// It sets up TLS 1.3-only connections, proper cipher suites, and middleware chain for
+// request processing. The prefix parameter customizes URL paths and trustProxy enables
+// reverse proxy support for deployment behind load balancers or CDNs.
 func NewServer(prefix string, trustProxy bool) *Server {
 	config := &tls.Config{
 		MinVersion:               tls.VersionTLS13,
@@ -85,14 +98,21 @@ func NewServer(prefix string, trustProxy bool) *Server {
 // https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
 // Constants moved to constants.go
 
+// SecureRandomAlphaString generates a cryptographically secure random alphabetic string.
+// Returns a 16-character string using only letters for use in tokens, session IDs, and
+// other security-sensitive contexts. Uses crypto/rand for entropy source.
 func SecureRandomAlphaString() string {
+	// Fixed 16-character length for consistent token generation
 	length := 16
 	result := make([]byte, length)
+	// Buffer size calculation for efficient random byte usage
 	bufferSize := int(float64(length) * 1.3)
 	for i, j, randomBytes := 0, 0, []byte{}; i < length; j++ {
+		// Refresh random bytes buffer when needed for efficiency
 		if j%bufferSize == 0 {
 			randomBytes = SecureRandomBytes(bufferSize)
 		}
+		// Filter random bytes to only include valid letter indices
 		if idx := int(randomBytes[j%length] & letterIdxMask); idx < len(letterBytes) {
 			result[i] = letterBytes[idx]
 			i++
@@ -101,9 +121,12 @@ func SecureRandomAlphaString() string {
 	return string(result)
 }
 
-// SecureRandomBytes returns the requested number of bytes using crypto/rand
+// SecureRandomBytes generates cryptographically secure random bytes of specified length.
+// Uses crypto/rand for high-quality entropy suitable for cryptographic operations, tokens,
+// and security-sensitive random data generation. Panics on randomness failure for security.
 func SecureRandomBytes(length int) []byte {
 	randomBytes := make([]byte, length)
+	// Use crypto/rand for cryptographically secure random generation
 	_, err := rand.Read(randomBytes)
 	if err != nil {
 		log.Fatal("Unable to generate random bytes")

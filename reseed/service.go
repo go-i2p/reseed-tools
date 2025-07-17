@@ -25,9 +25,13 @@ type routerInfo struct {
 	RI      *router_info.RouterInfo
 }
 
+// Peer represents a unique identifier for an I2P peer requesting reseed data.
+// It is used to generate deterministic, peer-specific SU3 file contents to ensure
+// different peers receive different router sets for improved network diversity.
 type Peer string
 
 func (p Peer) Hash() int {
+	// Generate deterministic hash from peer identifier for consistent SU3 selection
 	b := sha256.Sum256([]byte(p))
 	c := make([]byte, len(b))
 	copy(c, b[:])
@@ -39,17 +43,31 @@ func (p Peer) Hash() int {
 	PeerSu3Bytes(peer Peer) ([]byte, error)
 }*/
 
+// ReseederImpl implements the core reseed service functionality for generating SU3 files.
+// It manages router information caching, cryptographic signing, and periodic rebuilding of
+// reseed data to provide fresh router information to bootstrapping I2P nodes. The service
+// maintains multiple pre-built SU3 files to efficiently serve concurrent requests.
 type ReseederImpl struct {
+	// netdb provides access to the local router information database
 	netdb *LocalNetDbImpl
+	// su3s channel buffers pre-built SU3 files for efficient serving
 	su3s  chan [][]byte
 
+	// SigningKey contains the RSA private key for SU3 file cryptographic signing
 	SigningKey      *rsa.PrivateKey
+	// SignerID contains the identity string used in SU3 signature verification
 	SignerID        []byte
+	// NumRi specifies the number of router infos to include in each SU3 file
 	NumRi           int
+	// RebuildInterval determines how often to refresh the SU3 file cache
 	RebuildInterval time.Duration
+	// NumSu3 specifies the number of pre-built SU3 files to maintain
 	NumSu3          int
 }
 
+// NewReseeder creates a new reseed service instance with default configuration.
+// It initializes the service with standard parameters: 77 router infos per SU3 file
+// and 90-hour rebuild intervals to balance freshness with server performance.
 func NewReseeder(netdb *LocalNetDbImpl) *ReseederImpl {
 	return &ReseederImpl{
 		netdb:           netdb,

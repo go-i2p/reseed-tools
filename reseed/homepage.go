@@ -16,6 +16,9 @@ import (
 //go:embed content
 var f embed.FS
 
+// SupportedLanguages defines all languages available for the reseed server homepage.
+// These language tags are used for content localization and browser language matching
+// to provide multilingual support for users accessing the reseed service web interface.
 var SupportedLanguages = []language.Tag{
 	language.English,
 	language.Russian,
@@ -37,8 +40,13 @@ var (
 	CachedDataPages     = map[string][]byte{}
 )
 
+// StableContentPath returns the path to static content files for the reseed server homepage.
+// It automatically extracts embedded content to the filesystem if not already present and
+// ensures the content directory structure is available for serving web requests.
 func StableContentPath() (string, error) {
+	// Attempt to get the base content path from the system
 	BaseContentPath, ContentPathError := ContentPath()
+	// Extract embedded content if directory doesn't exist
 	if _, err := os.Stat(BaseContentPath); os.IsNotExist(err) {
 		if err := unembed.Unembed(f, BaseContentPath); err != nil {
 			return "", err
@@ -66,6 +74,9 @@ var footer = []byte(`  </body>
 
 var md = markdown.New(markdown.XHTMLOutput(true), markdown.HTML(true))
 
+// ContentPath determines the filesystem path where reseed server content should be stored.
+// It checks the current working directory and creates a content subdirectory for serving
+// static files like HTML, CSS, and localized content to reseed service users.
 func ContentPath() (string, error) {
 	exPath, err := os.Getwd()
 	if err != nil {
