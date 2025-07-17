@@ -41,6 +41,7 @@ func NewTLSCertificateAltNames(priv *ecdsa.PrivateKey, hosts ...string) ([]byte,
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
+		lgr.WithError(err).Error("Failed to generate serial number for TLS certificate")
 		return nil, err
 	}
 
@@ -76,6 +77,7 @@ func NewTLSCertificateAltNames(priv *ecdsa.PrivateKey, hosts ...string) ([]byte,
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
 	if err != nil {
+		lgr.WithError(err).WithField("hosts", hosts).Error("Failed to create TLS certificate")
 		return nil, err
 	}
 

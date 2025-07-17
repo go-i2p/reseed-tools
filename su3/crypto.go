@@ -10,9 +10,14 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
+
+	"github.com/go-i2p/logger"
 )
+
+var lgr = logger.GetGoI2PLogger()
 
 // dsaSignature represents a DSA signature containing R and S components.
 // Used for ASN.1 encoding/decoding of DSA signatures in SU3 verification.
@@ -29,6 +34,7 @@ type ecdsaSignature dsaSignature
 // This function extends the standard x509 signature verification to support additional algorithms needed for SU3 files.
 func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, signature []byte) (err error) {
 	if c == nil {
+		lgr.Error("Certificate is nil during signature verification")
 		return errors.New("x509: certificate is nil")
 	}
 
@@ -46,10 +52,12 @@ func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, s
 	case x509.SHA512WithRSA, x509.ECDSAWithSHA512:
 		hashType = crypto.SHA512
 	default:
+		lgr.WithField("algorithm", algo).Error("Unsupported signature algorithm")
 		return x509.ErrUnsupportedAlgorithm
 	}
 
 	if !hashType.Available() {
+		lgr.WithField("hash_type", hashType).Error("Hash type not available")
 		return x509.ErrUnsupportedAlgorithm
 	}
 	h := hashType.New()
@@ -66,32 +74,39 @@ func checkSignature(c *x509.Certificate, algo x509.SignatureAlgorithm, signed, s
 	case *dsa.PublicKey:
 		dsaSig := new(dsaSignature)
 		if _, err := asn1.Unmarshal(signature, dsaSig); err != nil {
+			lgr.WithError(err).Error("Failed to unmarshal DSA signature")
 			return err
 		}
 		// Validate DSA signature components are positive integers
 		// Zero or negative values indicate malformed or invalid signatures
 		if dsaSig.R.Sign() <= 0 || dsaSig.S.Sign() <= 0 {
+			lgr.WithField("r_sign", dsaSig.R.Sign()).WithField("s_sign", dsaSig.S.Sign()).Error("DSA signature contained zero or negative values")
 			return errors.New("x509: DSA signature contained zero or negative values")
 		}
 		if !dsa.Verify(pub, digest, dsaSig.R, dsaSig.S) {
+			lgr.Error("DSA signature verification failed")
 			return errors.New("x509: DSA verification failure")
 		}
 		return
 	case *ecdsa.PublicKey:
 		ecdsaSig := new(ecdsaSignature)
 		if _, err := asn1.Unmarshal(signature, ecdsaSig); err != nil {
+			lgr.WithError(err).Error("Failed to unmarshal ECDSA signature")
 			return err
 		}
 		// Validate ECDSA signature components are positive integers
 		// Similar validation to DSA as both use R,S component pairs
 		if ecdsaSig.R.Sign() <= 0 || ecdsaSig.S.Sign() <= 0 {
+			lgr.WithField("r_sign", ecdsaSig.R.Sign()).WithField("s_sign", ecdsaSig.S.Sign()).Error("ECDSA signature contained zero or negative values")
 			return errors.New("x509: ECDSA signature contained zero or negative values")
 		}
 		if !ecdsa.Verify(pub, digest, ecdsaSig.R, ecdsaSig.S) {
+			lgr.Error("ECDSA signature verification failed")
 			return errors.New("x509: ECDSA verification failure")
 		}
 		return
 	}
+	lgr.WithField("public_key_type", fmt.Sprintf("%T", c.PublicKey)).Error("Unsupported public key algorithm")
 	return x509.ErrUnsupportedAlgorithm
 }
 

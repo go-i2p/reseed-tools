@@ -38,6 +38,7 @@ func (s *Blacklist) LoadFile(file string) error {
 				s.BlockIP(ip)
 			}
 		} else {
+			lgr.WithError(err).WithField("blacklist_file", file).Error("Failed to load blacklist file")
 			return err
 		}
 	}
@@ -75,18 +76,21 @@ func (ln blacklistListener) Accept() (net.Conn, error) {
 	// Accept incoming TCP connection for blacklist evaluation
 	tc, err := ln.AcceptTCP()
 	if err != nil {
+		lgr.WithError(err).Error("Failed to accept TCP connection")
 		return nil, err
 	}
 
 	// Extract IP address from remote connection for blacklist checking
 	ip, _, err := net.SplitHostPort(tc.RemoteAddr().String())
 	if err != nil {
+		lgr.WithError(err).WithField("remote_addr", tc.RemoteAddr().String()).Error("Failed to parse remote address")
 		tc.Close()
 		return tc, err
 	}
 
 	// Reject connection immediately if IP is blacklisted for security
 	if ln.blacklist.isBlocked(ip) {
+		lgr.WithField("blocked_ip", ip).Warn("Connection rejected: IP address is blacklisted")
 		tc.Close()
 		return nil, errors.New("connection rejected: IP address is blacklisted")
 	}

@@ -31,12 +31,14 @@ import (
 func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
 	privPem, err := ioutil.ReadFile(path)
 	if nil != err {
+		lgr.WithError(err).WithField("key_path", path).Error("Failed to read private key file")
 		return nil, err
 	}
 
 	privDer, _ := pem.Decode(privPem)
 	privKey, err := x509.ParsePKCS1PrivateKey(privDer.Bytes)
 	if nil != err {
+		lgr.WithError(err).WithField("key_path", path).Error("Failed to parse private key")
 		return nil, err
 	}
 
@@ -55,6 +57,7 @@ func signerFile(signerID string) string {
 func getOrNewSigningCert(signerKey *string, signerID string, auto bool) (*rsa.PrivateKey, error) {
 	// Check if signing key file exists before attempting to load
 	if _, err := os.Stat(*signerKey); nil != err {
+		lgr.WithError(err).WithField("signer_key", *signerKey).WithField("signer_id", signerID).Debug("Signing key file not found, prompting for generation")
 		fmt.Printf("Unable to read signing key '%s'\n", *signerKey)
 		// Prompt user for key generation in interactive mode
 		if !auto {
@@ -62,11 +65,13 @@ func getOrNewSigningCert(signerKey *string, signerID string, auto bool) (*rsa.Pr
 			reader := bufio.NewReader(os.Stdin)
 			input, _ := reader.ReadString('\n')
 			if []byte(input)[0] != 'y' {
+				lgr.WithField("signer_id", signerID).Error("User declined to generate signing key")
 				return nil, fmt.Errorf("A signing key is required")
 			}
 		}
 		// Generate new signing certificate if user confirmed or auto mode
 		if err := createSigningCertificate(signerID); nil != err {
+			lgr.WithError(err).WithField("signer_id", signerID).Error("Failed to create signing certificate")
 			return nil, err
 		}
 

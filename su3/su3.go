@@ -69,6 +69,7 @@ func New() *File {
 // Returns an error if the private key is nil or signature generation fails.
 func (s *File) Sign(privkey *rsa.PrivateKey) error {
 	if privkey == nil {
+		lgr.Error("Private key cannot be nil for SU3 signing")
 		return fmt.Errorf("private key cannot be nil")
 	}
 
@@ -90,6 +91,7 @@ func (s *File) Sign(privkey *rsa.PrivateKey) error {
 	case SigTypeECDSAWithSHA512, SigTypeRSAWithSHA512:
 		hashType = crypto.SHA512
 	default:
+		lgr.WithField("signature_type", s.SignatureType).Error("Unknown signature type for SU3 signing")
 		return fmt.Errorf("unknown signature type: %d", s.SignatureType)
 	}
 
@@ -101,6 +103,7 @@ func (s *File) Sign(privkey *rsa.PrivateKey) error {
 	// The hash type is already applied, so we pass 0 to indicate pre-hashed data
 	sig, err := rsa.SignPKCS1v15(rand.Reader, privkey, 0, digest)
 	if nil != err {
+		lgr.WithError(err).Error("Failed to generate RSA signature for SU3 file")
 		return err
 	}
 
@@ -267,10 +270,17 @@ func (s *File) VerifySignature(cert *x509.Certificate) error {
 	case SigTypeRSAWithSHA512:
 		sigAlg = x509.SHA512WithRSA
 	default:
+		lgr.WithField("signature_type", s.SignatureType).Error("Unknown signature type for SU3 verification")
 		return fmt.Errorf("unknown signature type: %d", s.SignatureType)
 	}
 
-	return checkSignature(cert, sigAlg, s.BodyBytes(), s.Signature)
+	err := checkSignature(cert, sigAlg, s.BodyBytes(), s.Signature)
+	if err != nil {
+		lgr.WithError(err).WithField("signature_type", s.SignatureType).Error("SU3 signature verification failed")
+		return err
+	}
+
+	return nil
 }
 
 // String returns a human-readable representation of the SU3 file metadata.

@@ -39,12 +39,14 @@ func keygenAction(c *cli.Context) error {
 	// Validate that at least one key generation option is specified
 	if signerID == "" && tlsHost == "" {
 		fmt.Println("You must specify either --tlsHost or --signer")
+		lgr.Error("Key generation requires either --tlsHost or --signer parameter")
 		return fmt.Errorf("You must specify either --tlsHost or --signer")
 	}
 
 	// Generate signing certificate if signer ID is provided
 	if signerID != "" {
 		if err := createSigningCertificate(signerID); nil != err {
+			lgr.WithError(err).WithField("signer_id", signerID).Error("Failed to create signing certificate")
 			fmt.Println(err)
 			return err
 		}
@@ -54,6 +56,7 @@ func keygenAction(c *cli.Context) error {
 	if trustProxy {
 		if tlsHost != "" {
 			if err := createTLSCertificate(tlsHost); nil != err {
+				lgr.WithError(err).WithField("tls_host", tlsHost).Error("Failed to create TLS certificate")
 				fmt.Println(err)
 				return err
 			}

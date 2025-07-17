@@ -4,10 +4,13 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/go-i2p/logger"
 	"github.com/urfave/cli/v3"
 	"i2pgit.org/idk/reseed-tools/cmd"
 	"i2pgit.org/idk/reseed-tools/reseed"
 )
+
+var lgr = logger.GetGoI2PLogger()
 
 func main() {
 	// TLS 1.3 is available only on an opt-in basis in Go 1.12.
@@ -38,6 +41,7 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
+		lgr.WithError(err).Error("Application execution failed")
 		os.Exit(1)
 	}
 }

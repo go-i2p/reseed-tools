@@ -37,11 +37,19 @@ func (ks *KeyStore) DirReseederCertificate(dir string, signer []byte) (*x509.Cer
 // Moved from: utils.go
 func (ks *KeyStore) reseederCertificate(dir string, signer []byte) (*x509.Certificate, error) {
 	certFile := filepath.Base(SignerFilename(string(signer)))
-	certString, err := os.ReadFile(filepath.Join(ks.Path, dir, certFile))
+	certPath := filepath.Join(ks.Path, dir, certFile)
+	certString, err := os.ReadFile(certPath)
 	if nil != err {
+		lgr.WithError(err).WithField("cert_file", certPath).WithField("signer", string(signer)).Error("Failed to read reseed certificate file")
 		return nil, err
 	}
 
 	certPem, _ := pem.Decode(certString)
-	return x509.ParseCertificate(certPem.Bytes)
+	cert, err := x509.ParseCertificate(certPem.Bytes)
+	if err != nil {
+		lgr.WithError(err).WithField("cert_file", certPath).WithField("signer", string(signer)).Error("Failed to parse reseed certificate")
+		return nil, err
+	}
+
+	return cert, nil
 }
