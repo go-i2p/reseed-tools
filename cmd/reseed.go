@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/rsa"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -275,30 +276,85 @@ func fileExists(filename string) bool {
 }
 
 func reseedAction(c *cli.Context) error {
+	// Validate required configuration parameters
+	netdbDir, signerID, err := validateRequiredConfig(c)
+	if err != nil {
+		return err
+	}
+
+	// Setup remote NetDB sharing if configured
+	if err := setupRemoteNetDBSharing(c); err != nil {
+		return err
+	}
+
+	// Configure TLS certificates for all protocols
+	tlsConfig, err := configureTLSCertificates(c)
+	if err != nil {
+		return err
+	}
+
+	// Setup I2P keys if I2P protocol is enabled
+	i2pkey, err := setupI2PKeys(c, tlsConfig)
+	if err != nil {
+		return err
+	}
+
+	// Setup Onion keys if Onion protocol is enabled
+	if err := setupOnionKeys(c, tlsConfig); err != nil {
+		return err
+	}
+
+	// Parse configuration and setup signing keys
+	reloadIntvl, privKey, err := setupSigningConfiguration(c, signerID)
+	if err != nil {
+		return err
+	}
+
+	// Initialize reseeder with configured parameters
+	reseeder, err := initializeReseeder(c, netdbDir, signerID, privKey, reloadIntvl)
+	if err != nil {
+		return err
+	}
+
+	// Start all configured servers
+	startConfiguredServers(c, tlsConfig, i2pkey, reseeder)
+	return nil
+}
+
+// validateRequiredConfig validates and returns the required netdb and signer configuration.
+func validateRequiredConfig(c *cli.Context) (string, string, error) {
 	providedReseeds(c)
+
 	netdbDir := c.String("netdb")
 	if netdbDir == "" {
 		fmt.Println("--netdb is required")
-		return fmt.Errorf("--netdb is required")
+		return "", "", fmt.Errorf("--netdb is required")
 	}
 
 	signerID := c.String("signer")
 	if signerID == "" || signerID == "you@mail.i2p" {
 		fmt.Println("--signer is required")
-		return fmt.Errorf("--signer is required")
+		return "", "", fmt.Errorf("--signer is required")
 	}
+
 	if !strings.Contains(signerID, "@") {
 		if !fileExists(signerID) {
 			fmt.Println("--signer must be an email address or a file containing an email address.")
-			return fmt.Errorf("--signer must be an email address or a file containing an email address.")
+			return "", "", fmt.Errorf("--signer must be an email address or a file containing an email address.")
 		}
 		bytes, err := ioutil.ReadFile(signerID)
 		if err != nil {
 			fmt.Println("--signer must be an email address or a file containing an email address.")
-			return fmt.Errorf("--signer must be an email address or a file containing an email address.")
+			return "", "", fmt.Errorf("--signer must be an email address or a file containing an email address.")
 		}
 		signerID = string(bytes)
 	}
+
+	return netdbDir, signerID, nil
+}
+
+// setupRemoteNetDBSharing configures and starts remote NetDB downloading if share-peer is specified.
+func setupRemoteNetDBSharing(c *cli.Context) error {
 	if c.String("share-peer") != "" {
 		count := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 		for i := range count {
@@ -312,55 +368,68 @@ func reseedAction(c *cli.Context) error {
 		}
 		go getSupplementalNetDb(c.String("share-peer"), c.String("share-password"), c.String("netdb"), c.String("samaddr"))
 	}
+	return nil
+}
 
-	var tlsCert, tlsKey string
-	tlsHost := c.String("tlsHost")
-	onionTlsHost := ""
-	var onionTlsCert, onionTlsKey string
-	i2pTlsHost := ""
-	var i2pTlsCert, i2pTlsKey string
-	var i2pkey i2pkeys.I2PKeys
+// tlsConfiguration holds TLS certificate configuration for different protocols.
+type tlsConfiguration struct {
+	tlsCert, tlsKey           string
+	tlsHost                   string
+	onionTlsCert, onionTlsKey string
+	onionTlsHost              string
+	i2pTlsCert, i2pTlsKey     string
+	i2pTlsHost                string
+}
 
-	if tlsHost != "" {
-		onionTlsHost = tlsHost
-		i2pTlsHost = tlsHost
-		tlsKey = c.String("tlsKey")
-		// if no key is specified, default to the host.pem in the current dir
-		if tlsKey == "" {
-			tlsKey = tlsHost + ".pem"
-			onionTlsKey = tlsHost + ".pem"
-			i2pTlsKey = tlsHost + ".pem"
+// configureTLSCertificates sets up TLS certificates and keys for HTTP/HTTPS protocol.
+func configureTLSCertificates(c *cli.Context) (*tlsConfiguration, error) {
+	config := &tlsConfiguration{
+		tlsHost: c.String("tlsHost"),
+	}
+
+	if config.tlsHost != "" {
+		config.onionTlsHost = config.tlsHost
+		config.i2pTlsHost = config.tlsHost
+
+		config.tlsKey = c.String("tlsKey")
+		if config.tlsKey == "" {
+			config.tlsKey = config.tlsHost + ".pem"
+			config.onionTlsKey = config.tlsHost + ".pem"
+			config.i2pTlsKey = config.tlsHost + ".pem"
 		}
 
-		tlsCert = c.String("tlsCert")
-		// if no certificate is specified, default to the host.crt in the current dir
-		if tlsCert == "" {
-			tlsCert = tlsHost + ".crt"
-			onionTlsCert = tlsHost + ".crt"
-			i2pTlsCert = tlsHost + ".crt"
+		config.tlsCert = c.String("tlsCert")
+		if config.tlsCert == "" {
+			config.tlsCert = config.tlsHost + ".crt"
+			config.onionTlsCert = config.tlsHost + ".crt"
+			config.i2pTlsCert = config.tlsHost + ".crt"
 		}
 
-		// prompt to create tls keys if they don't exist?
 		auto := c.Bool("yes")
 		ignore := c.Bool("trustProxy")
 		if !ignore {
-			// use ACME?
 			acme := c.Bool("acme")
 			if acme {
 				acmeserver := c.String("acmeserver")
-				err := checkUseAcmeCert(tlsHost, signerID, acmeserver, &tlsCert, &tlsKey, auto)
-				if nil != err {
+				err := checkUseAcmeCert(config.tlsHost, "", acmeserver, &config.tlsCert, &config.tlsKey, auto)
+				if err != nil {
 					log.Fatalln(err)
 				}
 			} else {
-				err := checkOrNewTLSCert(tlsHost, &tlsCert, &tlsKey, auto)
-				if nil != err {
+				err := checkOrNewTLSCert(config.tlsHost, &config.tlsCert, &config.tlsKey, auto)
+				if err != nil {
 					log.Fatalln(err)
 				}
 			}
 		}
-
 	}
+
+	return config, nil
+}
+
+// setupI2PKeys configures I2P keys and TLS certificates if I2P protocol is enabled.
+func setupI2PKeys(c *cli.Context, tlsConfig *tlsConfiguration) (i2pkeys.I2PKeys, error) {
+	var i2pkey i2pkeys.I2PKeys
 
 	if c.Bool("i2p") {
 		var err error
@@ -368,35 +437,40 @@ func reseedAction(c *cli.Context) error {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		if i2pTlsHost == "" {
-			i2pTlsHost = i2pkey.Addr().Base32()
+
+		if tlsConfig.i2pTlsHost == "" {
+			tlsConfig.i2pTlsHost = i2pkey.Addr().Base32()
 		}
-		if i2pTlsHost != "" {
-			// if no key is specified, default to the host.pem in the current dir
-			if i2pTlsKey == "" {
-				i2pTlsKey = i2pTlsHost + ".pem"
+
+		if tlsConfig.i2pTlsHost != "" {
+			if tlsConfig.i2pTlsKey == "" {
+				tlsConfig.i2pTlsKey = tlsConfig.i2pTlsHost + ".pem"
 			}
 
-			// if no certificate is specified, default to the host.crt in the current dir
-			if i2pTlsCert == "" {
-				i2pTlsCert = i2pTlsHost + ".crt"
+			if tlsConfig.i2pTlsCert == "" {
+				tlsConfig.i2pTlsCert = tlsConfig.i2pTlsHost + ".crt"
 			}
 
-			// prompt to create tls keys if they don't exist?
 			auto := c.Bool("yes")
 			ignore := c.Bool("trustProxy")
 			if !ignore {
-				err := checkOrNewTLSCert(i2pTlsHost, &i2pTlsCert, &i2pTlsKey, auto)
-				if nil != err {
+				err := checkOrNewTLSCert(tlsConfig.i2pTlsHost, &tlsConfig.i2pTlsCert, &tlsConfig.i2pTlsKey, auto)
+				if err != nil {
 					log.Fatalln(err)
 				}
 			}
 		}
 	}
 
+	return i2pkey, nil
+}
+
+// setupOnionKeys configures Onion service keys and TLS certificates if Onion protocol is enabled.
+func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
 	if c.Bool("onion") {
 		var ok []byte
 		var err error
+
 		if _, err = os.Stat(c.String("onionKey")); err == nil {
 			ok, err = ioutil.ReadFile(c.String("onionKey"))
 			if err != nil {
@@ -409,60 +483,66 @@ func reseedAction(c *cli.Context) error {
 			}
 			ok = []byte(key.PrivateKey())
 		}
-		if onionTlsHost == "" {
-			onionTlsHost = torutil.OnionServiceIDFromPrivateKey(ed25519.PrivateKey(ok)) + ".onion"
+
+		if tlsConfig.onionTlsHost == "" {
+			tlsConfig.onionTlsHost = torutil.OnionServiceIDFromPrivateKey(ed25519.PrivateKey(ok)) + ".onion"
 		}
+
 		err = ioutil.WriteFile(c.String("onionKey"), ok, 0o644)
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		if onionTlsHost != "" {
-			// if no key is specified, default to the host.pem in the current dir
-			if onionTlsKey == "" {
-				onionTlsKey = onionTlsHost + ".pem"
+
+		if tlsConfig.onionTlsHost != "" {
+			if tlsConfig.onionTlsKey == "" {
+				tlsConfig.onionTlsKey = tlsConfig.onionTlsHost + ".pem"
 			}
 
-			// if no certificate is specified, default to the host.crt in the current dir
-			if onionTlsCert == "" {
-				onionTlsCert = onionTlsHost + ".crt"
+			if tlsConfig.onionTlsCert == "" {
+				tlsConfig.onionTlsCert = tlsConfig.onionTlsHost + ".crt"
 			}
 
-			// prompt to create tls keys if they don't exist?
 			auto := c.Bool("yes")
 			ignore := c.Bool("trustProxy")
 			if !ignore {
-				err := checkOrNewTLSCert(onionTlsHost, &onionTlsCert, &onionTlsKey, auto)
-				if nil != err {
+				err := checkOrNewTLSCert(tlsConfig.onionTlsHost, &tlsConfig.onionTlsCert, &tlsConfig.onionTlsKey, auto)
+				if err != nil {
 					log.Fatalln(err)
 				}
 			}
 		}
 	}
 
+	return nil
+}
+
+// setupSigningConfiguration parses duration and sets up signing certificates.
+func setupSigningConfiguration(c *cli.Context, signerID string) (time.Duration, *rsa.PrivateKey, error) {
 	reloadIntvl, err := time.ParseDuration(c.String("interval"))
-	if nil != err {
+	if err != nil {
 		fmt.Printf("'%s' is not a valid time interval.\n", reloadIntvl)
-		return fmt.Errorf("'%s' is not a valid time interval.\n", reloadIntvl)
+		return 0, nil, fmt.Errorf("'%s' is not a valid time interval.\n", reloadIntvl)
 	}
 
 	signerKey := c.String("key")
-	// if no key is specified, default to the signerID.pem in the current dir
 	if signerKey == "" {
 		signerKey = signerFile(signerID) + ".pem"
 	}
 
-	// load our signing privKey
 	auto := c.Bool("yes")
 	privKey, err := getOrNewSigningCert(&signerKey, signerID, auto)
-	if nil != err {
+	if err != nil {
 		log.Fatalln(err)
 	}
 
-	// create a local file netdb provider
+	return reloadIntvl, privKey, nil
+}
+
+// initializeReseeder creates and configures a new reseeder instance.
+func initializeReseeder(c *cli.Context, netdbDir, signerID string, privKey *rsa.PrivateKey, reloadIntvl time.Duration) (*reseed.ReseederImpl, error) {
 	routerInfoAge := c.Duration("routerInfoAge")
 	netdb := reseed.NewLocalNetDb(netdbDir, routerInfoAge)
 
-	// create a reseeder
 	reseeder := reseed.NewReseeder(netdb)
 	reseeder.SigningKey = privKey
 	reseeder.SignerID = []byte(signerID)
@@ -471,32 +551,34 @@ func reseedAction(c *cli.Context) error {
 	reseeder.RebuildInterval = reloadIntvl
 	reseeder.Start()
 
-	// create a server
+	return reseeder, nil
+}
 
+// startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS).
+func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
 	if c.Bool("onion") {
 		log.Printf("Onion server starting\n")
-		if tlsHost != "" && tlsCert != "" && tlsKey != "" {
-			go reseedOnion(c, onionTlsCert, onionTlsKey, reseeder)
+		if tlsConfig.tlsHost != "" && tlsConfig.tlsCert != "" && tlsConfig.tlsKey != "" {
+			go reseedOnion(c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder)
 		} else {
-			reseedOnion(c, onionTlsCert, onionTlsKey, reseeder)
+			reseedOnion(c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder)
 		}
 	}
 	if c.Bool("i2p") {
 		log.Printf("I2P server starting\n")
-		if tlsHost != "" && tlsCert != "" && tlsKey != "" {
-			go reseedI2P(c, i2pTlsCert, i2pTlsKey, i2pkey, reseeder)
+		if tlsConfig.tlsHost != "" && tlsConfig.tlsCert != "" && tlsConfig.tlsKey != "" {
+			go reseedI2P(c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder)
 		} else {
-			reseedI2P(c, i2pTlsCert, i2pTlsKey, i2pkey, reseeder)
+			reseedI2P(c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder)
 		}
 	}
 	if !c.Bool("trustProxy") {
 		log.Printf("HTTPS server starting\n")
-		reseedHTTPS(c, tlsCert, tlsKey, reseeder)
+		reseedHTTPS(c, tlsConfig.tlsCert, tlsConfig.tlsKey, reseeder)
 	} else {
 		log.Printf("HTTP server starting on\n")
 		reseedHTTP(c, reseeder)
 	}
-	return nil
 }
 
 func reseedHTTPS(c *cli.Context, tlsCert, tlsKey string, reseeder *reseed.ReseederImpl) {
