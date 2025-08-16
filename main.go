@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-i2p/logger"
 	"github.com/urfave/cli/v3"
-	"i2pgit.org/idk/reseed-tools/cmd"
-	"i2pgit.org/idk/reseed-tools/reseed"
+	"i2pgit.org/go-i2p/reseed-tools/cmd"
+	"i2pgit.org/go-i2p/reseed-tools/reseed"
 )
 
 var lgr = logger.GetGoI2PLogger()

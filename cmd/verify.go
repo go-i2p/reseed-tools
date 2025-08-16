@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 
 	"github.com/urfave/cli/v3"
-	"i2pgit.org/idk/reseed-tools/reseed"
-	"i2pgit.org/idk/reseed-tools/su3"
+	"i2pgit.org/go-i2p/reseed-tools/reseed"
+	"i2pgit.org/go-i2p/reseed-tools/su3"
 )
 
 // I2PHome returns the I2P configuration directory path for the current system.

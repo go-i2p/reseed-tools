@@ -29,7 +29,7 @@ import (
 	"github.com/otiai10/copy"
 	"github.com/rglonek/untar"
 	"github.com/urfave/cli/v3"
-	"i2pgit.org/idk/reseed-tools/reseed"
+	"i2pgit.org/go-i2p/reseed-tools/reseed"
 
 	"github.com/go-i2p/checki2cp/getmeanetdb"
 )

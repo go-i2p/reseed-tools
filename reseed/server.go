@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -156,17 +157,15 @@ func (srv *Server) Acceptable() string {
 	if srv.acceptables == nil {
 		srv.acceptables = make(map[string]time.Time)
 	}
+
+	// Clean up expired entries first
+	srv.cleanupExpiredTokensUnsafe()
+
+	// If still too many entries, remove oldest ones
 	if len(srv.acceptables) > 50 {
-		for val := range srv.acceptables {
-			srv.checkAcceptableUnsafe(val)
-		}
-		for val := range srv.acceptables {
-			if len(srv.acceptables) < 50 {
-				break
-			}
-			delete(srv.acceptables, val)
-		}
+		srv.evictOldestTokensUnsafe(50)
 	}
+
 	acceptme := SecureRandomAlphaString()
 	srv.acceptables[acceptme] = time.Now()
 	return acceptme
@@ -276,4 +275,45 @@ func proxiedMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	}
 	return http.HandlerFunc(fn)
+}
+
+// cleanupExpiredTokensUnsafe removes expired tokens from the acceptables map.
+// This should only be called when the mutex is already held.
+func (srv *Server) cleanupExpiredTokensUnsafe() {
+	now := time.Now()
+	for token, timestamp := range srv.acceptables {
+		if now.Sub(timestamp) > (4 * time.Minute) {
+			delete(srv.acceptables, token)
+		}
+	}
+}
+
+// evictOldestTokensUnsafe removes the oldest tokens to keep the map size at the target.
+// This should only be called when the mutex is already held.
+func (srv *Server) evictOldestTokensUnsafe(targetSize int) {
+	if len(srv.acceptables) <= targetSize {
+		return
+	}
+
+	// Convert to slice and sort by timestamp
+	type tokenTime struct {
+		token string
+		time  time.Time
+	}
+
+	tokens := make([]tokenTime, 0, len(srv.acceptables))
+	for token, timestamp := range srv.acceptables {
+		tokens = append(tokens, tokenTime{token, timestamp})
+	}
+
+	// Sort by timestamp (oldest first)
+	sort.Slice(tokens, func(i, j int) bool {
+		return tokens[i].time.Before(tokens[j].time)
+	})
+
+	// Delete oldest tokens until we reach target size
+	toDelete := len(srv.acceptables) - targetSize
+	for i := 0; i < toDelete && i < len(tokens); i++ {
+		delete(srv.acceptables, tokens[i].token)
+	}
 }

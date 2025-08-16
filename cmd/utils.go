@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"i2pgit.org/idk/reseed-tools/reseed"
-	"i2pgit.org/idk/reseed-tools/su3"
+	"i2pgit.org/go-i2p/reseed-tools/reseed"
+	"i2pgit.org/go-i2p/reseed-tools/su3"
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
@@ -66,7 +66,7 @@ func getOrNewSigningCert(signerKey *string, signerID string, auto bool) (*rsa.Pr
 			input, _ := reader.ReadString('\n')
 			if []byte(input)[0] != 'y' {
 				lgr.WithField("signer_id", signerID).Error("User declined to generate signing key")
-				return nil, fmt.Errorf("A signing key is required")
+				return nil, fmt.Errorf("a signing key is required")
 			}
 		}
 		// Generate new signing certificate if user confirmed or auto mode
@@ -83,9 +83,32 @@ func getOrNewSigningCert(signerKey *string, signerID string, auto bool) (*rsa.Pr
 }
 
 func checkUseAcmeCert(tlsHost, signer, cadirurl string, tlsCert, tlsKey *string, auto bool) error {
-	// Check existence of both TLS certificate and private key files
+	// Check if certificate files exist and handle missing files
+	needsNewCert, err := checkAcmeCertificateFiles(tlsCert, tlsKey, tlsHost, auto)
+	if err != nil {
+		return err
+	}
+
+	// If files exist, check if certificate needs renewal
+	if !needsNewCert {
+		shouldRenew, err := checkAcmeCertificateRenewal(tlsCert, tlsKey, tlsHost, signer, cadirurl)
+		if err != nil {
+			return err
+		}
+		if !shouldRenew {
+			return nil
+		}
+	}
+
+	// Generate new ACME certificate
+	return generateNewAcmeCertificate(tlsHost, signer, cadirurl, tlsCert, tlsKey)
+}
+
+// checkAcmeCertificateFiles verifies certificate file existence and prompts for generation if needed.
+func checkAcmeCertificateFiles(tlsCert, tlsKey *string, tlsHost string, auto bool) (bool, error) {
 	_, certErr := os.Stat(*tlsCert)
 	_, keyErr := os.Stat(*tlsKey)
+
 	if certErr != nil || keyErr != nil {
 		if certErr != nil {
 			fmt.Printf("Unable to read TLS certificate '%s'\n", *tlsCert)
@@ -100,68 +123,100 @@ func checkUseAcmeCert(tlsHost, signer, cadirurl string, tlsCert, tlsKey *string,
 			input, _ := reader.ReadString('\n')
 			if []byte(input)[0] != 'y' {
 				fmt.Println("Continuing without TLS")
-				return nil
+				return false, nil
 			}
 		}
-	} else {
-		TLSConfig := &tls.Config{}
-		TLSConfig.NextProtos = []string{"http/1.1"}
-		TLSConfig.Certificates = make([]tls.Certificate, 1)
-		var err error
-		TLSConfig.Certificates[0], err = tls.LoadX509KeyPair(*tlsCert, *tlsKey)
-		if err != nil {
-			return err
-		}
-		// Check if certificate expires within 48 hours (time until expiration < 48 hours)
-		if time.Until(TLSConfig.Certificates[0].Leaf.NotAfter) < (time.Hour * 48) {
-			ecder, err := ioutil.ReadFile(tlsHost + signer + ".acme.key")
-			if err != nil {
-				return err
-			}
-			privateKey, err := x509.ParseECPrivateKey(ecder)
-			if err != nil {
-				return err
-			}
-			user := NewMyUser(signer, privateKey)
-			config := lego.NewConfig(user)
-			config.CADirURL = cadirurl
-			config.Certificate.KeyType = certcrypto.RSA2048
-			client, err := lego.NewClient(config)
-			if err != nil {
-				return err
-			}
-			renewAcmeIssuedCert(client, *user, tlsHost, tlsCert, tlsKey)
-		} else {
-			return nil
-		}
+		return true, nil
 	}
+
+	return false, nil
+}
+
+// checkAcmeCertificateRenewal loads existing certificate and checks if renewal is needed.
+func checkAcmeCertificateRenewal(tlsCert, tlsKey *string, tlsHost, signer, cadirurl string) (bool, error) {
+	tlsConfig := &tls.Config{}
+	tlsConfig.NextProtos = []string{"http/1.1"}
+	tlsConfig.Certificates = make([]tls.Certificate, 1)
+
+	var err error
+	tlsConfig.Certificates[0], err = tls.LoadX509KeyPair(*tlsCert, *tlsKey)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if certificate expires within 48 hours (time until expiration < 48 hours)
+	if time.Until(tlsConfig.Certificates[0].Leaf.NotAfter) < (time.Hour * 48) {
+		return renewExistingAcmeCertificate(tlsHost, signer, cadirurl, tlsCert, tlsKey)
+	}
+
+	return false, nil
+}
+
+// renewExistingAcmeCertificate loads existing ACME key and renews the certificate.
+func renewExistingAcmeCertificate(tlsHost, signer, cadirurl string, tlsCert, tlsKey *string) (bool, error) {
+	ecder, err := ioutil.ReadFile(tlsHost + signer + ".acme.key")
+	if err != nil {
+		return false, err
+	}
+
+	privateKey, err := x509.ParseECPrivateKey(ecder)
+	if err != nil {
+		return false, err
+	}
+
+	user := NewMyUser(signer, privateKey)
+	config := lego.NewConfig(user)
+	config.CADirURL = cadirurl
+	config.Certificate.KeyType = certcrypto.RSA2048
+
+	client, err := lego.NewClient(config)
+	if err != nil {
+		return false, err
+	}
+
+	err = renewAcmeIssuedCert(client, *user, tlsHost, tlsCert, tlsKey)
+	return true, err
+}
+
+// generateNewAcmeCertificate creates a new ACME private key and obtains a certificate.
+func generateNewAcmeCertificate(tlsHost, signer, cadirurl string, tlsCert, tlsKey *string) error {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
 	}
+
+	if err := saveAcmePrivateKey(privateKey, tlsHost, signer); err != nil {
+		return err
+	}
+
+	user := NewMyUser(signer, privateKey)
+	config := lego.NewConfig(user)
+	config.CADirURL = cadirurl
+	config.Certificate.KeyType = certcrypto.RSA2048
+
+	client, err := lego.NewClient(config)
+	if err != nil {
+		return err
+	}
+
+	return newAcmeIssuedCert(client, *user, tlsHost, tlsCert, tlsKey)
+}
+
+// saveAcmePrivateKey marshals and saves the ACME private key to disk.
+func saveAcmePrivateKey(privateKey *ecdsa.PrivateKey, tlsHost, signer string) error {
 	ecder, err := x509.MarshalECPrivateKey(privateKey)
 	if err != nil {
 		return err
 	}
+
 	filename := tlsHost + signer + ".acme.key"
 	keypem, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
 	defer keypem.Close()
-	err = pem.Encode(keypem, &pem.Block{Type: "EC PRIVATE KEY", Bytes: ecder})
-	if err != nil {
-		return err
-	}
-	user := NewMyUser(signer, privateKey)
-	config := lego.NewConfig(user)
-	config.CADirURL = cadirurl
-	config.Certificate.KeyType = certcrypto.RSA2048
-	client, err := lego.NewClient(config)
-	if err != nil {
-		return err
-	}
-	return newAcmeIssuedCert(client, *user, tlsHost, tlsCert, tlsKey)
+
+	return pem.Encode(keypem, &pem.Block{Type: "EC PRIVATE KEY", Bytes: ecder})
 }
 
 func renewAcmeIssuedCert(client *lego.Client, user MyUser, tlsHost string, tlsCert, tlsKey *string) error {
@@ -274,8 +329,7 @@ func checkOrNewTLSCert(tlsHost string, tlsCert, tlsKey *string, auto bool) error
 // over the I2P network. The generated certificate is valid for 10 years and uses 4096-bit RSA keys.
 func createSigningCertificate(signerID string) error {
 	// Generate 4096-bit RSA private key for strong cryptographic security
-	fmt.Println("Generating signing keys. This may take a minute...")
-	signerKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	signerKey, err := generateSigningPrivateKey()
 	if err != nil {
 		return err
 	}
@@ -287,37 +341,86 @@ func createSigningCertificate(signerID string) error {
 	}
 
 	// Save certificate to disk in PEM format for verification use
+	if err := saveSigningCertificateFile(signerID, signerCert); err != nil {
+		return err
+	}
+
+	// Save signing private key in PKCS#1 PEM format with certificate bundle
+	if err := saveSigningPrivateKeyFile(signerID, signerKey, signerCert); err != nil {
+		return err
+	}
+
+	// Generate and save Certificate Revocation List (CRL)
+	if err := generateAndSaveSigningCRL(signerID, signerKey, signerCert); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// generateSigningPrivateKey creates a new 4096-bit RSA private key for SU3 signing.
+// Returns the generated private key or an error if key generation fails.
+func generateSigningPrivateKey() (*rsa.PrivateKey, error) {
+	fmt.Println("Generating signing keys. This may take a minute...")
+	signerKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, err
+	}
+	return signerKey, nil
+}
+
+// saveSigningCertificateFile saves the signing certificate to disk in PEM format.
+// The certificate is saved as <signerID>.crt for verification use.
+func saveSigningCertificateFile(signerID string, signerCert []byte) error {
 	certFile := signerFile(signerID) + ".crt"
 	certOut, err := os.Create(certFile)
 	if err != nil {
 		return fmt.Errorf("failed to open %s for writing: %v", certFile, err)
 	}
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: signerCert})
-	certOut.Close()
-	fmt.Println("\tSigning certificate saved to:", certFile)
+	defer certOut.Close()
 
-	// Save signing private key in PKCS#1 PEM format
+	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: signerCert})
+	fmt.Println("\tSigning certificate saved to:", certFile)
+	return nil
+}
+
+// saveSigningPrivateKeyFile saves the signing private key in PKCS#1 PEM format with certificate bundle.
+// The private key is saved as <signerID>.pem with the certificate included for convenience.
+func saveSigningPrivateKeyFile(signerID string, signerKey *rsa.PrivateKey, signerCert []byte) error {
 	privFile := signerFile(signerID) + ".pem"
 	keyOut, err := os.OpenFile(privFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to open %s for writing: %v", privFile, err)
 	}
-	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(signerKey)})
-	pem.Encode(keyOut, &pem.Block{Type: "CERTIFICATE", Bytes: signerCert})
-	keyOut.Close()
-	fmt.Println("\tSigning private key saved to:", privFile)
+	defer keyOut.Close()
 
-	// CRL
+	// Write RSA private key in PKCS#1 format
+	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(signerKey)})
+
+	// Include certificate in the key file for convenience
+	pem.Encode(keyOut, &pem.Block{Type: "CERTIFICATE", Bytes: signerCert})
+
+	fmt.Println("\tSigning private key saved to:", privFile)
+	return nil
+}
+
+// generateAndSaveSigningCRL generates and saves a Certificate Revocation List (CRL) for the signing certificate.
+// The CRL is saved as <signerID>.crl and includes the certificate as revoked for testing purposes.
+func generateAndSaveSigningCRL(signerID string, signerKey *rsa.PrivateKey, signerCert []byte) error {
 	crlFile := signerFile(signerID) + ".crl"
 	crlOut, err := os.OpenFile(crlFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to open %s for writing: %s", crlFile, err)
 	}
+	defer crlOut.Close()
+
+	// Parse the certificate to extract information for CRL
 	crlcert, err := x509.ParseCertificate(signerCert)
 	if err != nil {
-		return fmt.Errorf("Certificate with unknown critical extension was not parsed: %s", err)
+		return fmt.Errorf("certificate with unknown critical extension was not parsed: %s", err)
 	}
 
+	// Create revoked certificate entry for testing purposes
 	now := time.Now()
 	revokedCerts := []pkix.RevokedCertificate{
 		{
@@ -326,18 +429,20 @@ func createSigningCertificate(signerID string) error {
 		},
 	}
 
+	// Generate CRL bytes
 	crlBytes, err := crlcert.CreateCRL(rand.Reader, signerKey, revokedCerts, now, now)
 	if err != nil {
 		return fmt.Errorf("error creating CRL: %s", err)
 	}
-	_, err = x509.ParseDERCRL(crlBytes)
-	if err != nil {
+
+	// Validate CRL by parsing it
+	if _, err := x509.ParseDERCRL(crlBytes); err != nil {
 		return fmt.Errorf("error reparsing CRL: %s", err)
 	}
-	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
-	crlOut.Close()
-	fmt.Printf("\tSigning CRL saved to: %s\n", crlFile)
 
+	// Save CRL to file
+	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
+	fmt.Printf("\tSigning CRL saved to: %s\n", crlFile)
 	return nil
 }
 
@@ -350,8 +455,7 @@ func createTLSCertificate(host string) error {
 // curve cryptography for efficient and secure TLS connections. The certificate is valid for the specified hostname.
 func CreateTLSCertificate(host string) error {
 	// Generate P-384 ECDSA private key for TLS encryption
-	fmt.Println("Generating TLS keys. This may take a minute...")
-	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	priv, err := generateTLSPrivateKey()
 	if err != nil {
 		return err
 	}
@@ -363,40 +467,99 @@ func CreateTLSCertificate(host string) error {
 	}
 
 	// Save TLS certificate to disk in PEM format for server use
-	certOut, err := os.Create(host + ".crt")
-	if err != nil {
-		return fmt.Errorf("failed to open %s for writing: %s", host+".crt", err)
+	if err := saveTLSCertificateFile(host, tlsCert); err != nil {
+		return err
 	}
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
-	certOut.Close()
-	fmt.Printf("\tTLS certificate saved to: %s\n", host+".crt")
 
-	// save the TLS private key
+	// Save the TLS private key with EC parameters and certificate bundle
+	if err := saveTLSPrivateKeyFile(host, priv, tlsCert); err != nil {
+		return err
+	}
+
+	// Generate and save Certificate Revocation List (CRL)
+	if err := generateAndSaveTLSCRL(host, priv, tlsCert); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// generateTLSPrivateKey creates a new P-384 ECDSA private key for TLS encryption.
+// Returns the generated private key or an error if key generation fails.
+func generateTLSPrivateKey() (*ecdsa.PrivateKey, error) {
+	fmt.Println("Generating TLS keys. This may take a minute...")
+	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return priv, nil
+}
+
+// saveTLSCertificateFile saves the TLS certificate to disk in PEM format.
+// The certificate is saved as <host>.crt for server use.
+func saveTLSCertificateFile(host string, tlsCert []byte) error {
+	certFile := host + ".crt"
+	certOut, err := os.Create(certFile)
+	if err != nil {
+		return fmt.Errorf("failed to open %s for writing: %s", certFile, err)
+	}
+	defer certOut.Close()
+
+	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
+	fmt.Printf("\tTLS certificate saved to: %s\n", certFile)
+	return nil
+}
+
+// saveTLSPrivateKeyFile saves the TLS private key with EC parameters and certificate bundle.
+// The private key is saved as <host>.pem with proper EC parameters and certificate included.
+func saveTLSPrivateKeyFile(host string, priv *ecdsa.PrivateKey, tlsCert []byte) error {
 	privFile := host + ".pem"
 	keyOut, err := os.OpenFile(privFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to open %s for writing: %v", privFile, err)
 	}
+	defer keyOut.Close()
+
+	// Encode secp384r1 curve parameters
 	secp384r1, err := asn1.Marshal(asn1.ObjectIdentifier{1, 3, 132, 0, 34}) // http://www.ietf.org/rfc/rfc5480.txt
+	if err != nil {
+		return fmt.Errorf("failed to marshal EC parameters: %v", err)
+	}
+
+	// Write EC parameters block
 	pem.Encode(keyOut, &pem.Block{Type: "EC PARAMETERS", Bytes: secp384r1})
+
+	// Marshal and write EC private key
 	ecder, err := x509.MarshalECPrivateKey(priv)
+	if err != nil {
+		return fmt.Errorf("failed to marshal EC private key: %v", err)
+	}
 	pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: ecder})
+
+	// Include certificate in the key file
 	pem.Encode(keyOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
 
-	keyOut.Close()
 	fmt.Printf("\tTLS private key saved to: %s\n", privFile)
+	return nil
+}
 
-	// CRL
+// generateAndSaveTLSCRL generates and saves a Certificate Revocation List (CRL) for the TLS certificate.
+// The CRL is saved as <host>.crl and includes the certificate as revoked for testing purposes.
+func generateAndSaveTLSCRL(host string, priv *ecdsa.PrivateKey, tlsCert []byte) error {
 	crlFile := host + ".crl"
 	crlOut, err := os.OpenFile(crlFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to open %s for writing: %s", crlFile, err)
 	}
+	defer crlOut.Close()
+
+	// Parse the certificate to extract information for CRL
 	crlcert, err := x509.ParseCertificate(tlsCert)
 	if err != nil {
-		return fmt.Errorf("Certificate with unknown critical extension was not parsed: %s", err)
+		return fmt.Errorf("certificate with unknown critical extension was not parsed: %s", err)
 	}
 
+	// Create revoked certificate entry for testing purposes
 	now := time.Now()
 	revokedCerts := []pkix.RevokedCertificate{
 		{
@@ -405,17 +568,19 @@ func CreateTLSCertificate(host string) error {
 		},
 	}
 
+	// Generate CRL bytes
 	crlBytes, err := crlcert.CreateCRL(rand.Reader, priv, revokedCerts, now, now)
 	if err != nil {
 		return fmt.Errorf("error creating CRL: %s", err)
 	}
-	_, err = x509.ParseDERCRL(crlBytes)
-	if err != nil {
+
+	// Validate CRL by parsing it
+	if _, err := x509.ParseDERCRL(crlBytes); err != nil {
 		return fmt.Errorf("error reparsing CRL: %s", err)
 	}
-	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
-	crlOut.Close()
-	fmt.Printf("\tTLS CRL saved to: %s\n", crlFile)
 
+	// Save CRL to file
+	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
+	fmt.Printf("\tTLS CRL saved to: %s\n", crlFile)
 	return nil
 }

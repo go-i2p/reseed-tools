@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/router_info"
-	"i2pgit.org/idk/reseed-tools/su3"
+	"i2pgit.org/go-i2p/reseed-tools/su3"
 )
 
 // routerInfo holds metadata and content for an individual I2P router information file.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli/v3"
-	"i2pgit.org/idk/reseed-tools/reseed"
+	"i2pgit.org/go-i2p/reseed-tools/reseed"
 )
 
 // NewVersionCommand creates a new CLI command for displaying the reseed-tools version.
