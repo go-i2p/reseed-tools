@@ -280,6 +280,8 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
+// reseedAction is the main entry point for the reseed command.
+// It orchestrates the configuration and startup of the reseed server.
 func reseedAction(c *cli.Context) error {
 	// Validate required configuration parameters
 	netdbDir, signerID, err := validateRequiredConfig(c)
