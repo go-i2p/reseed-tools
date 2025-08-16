@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/reseed-tools</a>
       </h2>
       <div class="repo-meta">
-        📝 487 commits
+        📝 500 commits
          • 📜 License
       </div>
     </div>
@@ -38,55 +38,57 @@
         
           <li><a href="docs/doc-pak/docs/EXAMPLES.html">EXAMPLES</a></li>
         
-          <li><a href="docs/reseed/content/lang/bn/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/content/lang/ar/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/content/lang/es/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/content/lang/hi/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/content/lang/ko/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/id/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/zh/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/jp/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/pr/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/es/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/content/lang/de/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/fr/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/de/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/hi/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/ko/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/reseed/content/lang/ru/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/content/lang/pr/homepage.html">Homepage</a></li>
-        
-          <li><a href="docs/content/lang/fr/homepage.html">Homepage</a></li>
+          <li><a href="docs/LOGGING_MIGRATION.html">Go I2P Reseed Tools - Logger Migration Summary</a></li>
         
           <li><a href="docs/content/lang/id/homepage.html">Homepage</a></li>
         
+          <li><a href="docs/reseed/content/lang/ru/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/reseed/content/lang/de/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/ar/homepage.html">Homepage</a></li>
+        
           <li><a href="docs/content/lang/jp/homepage.html">Homepage</a></li>
         
-          <li><a href="docs/content/lang/en/homepage.html">Homepage</a></li>
+          <li><a href="docs/reseed/content/lang/fr/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/ko/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/reseed/content/lang/zh/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/reseed/content/lang/pr/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/reseed/content/lang/bn/homepage.html">Homepage</a></li>
         
           <li><a href="docs/reseed/content/lang/en/homepage.html">Homepage</a></li>
         
-          <li><a href="docs/content/lang/bn/homepage.html">Homepage</a></li>
+          <li><a href="docs/reseed/content/lang/jp/homepage.html">Homepage</a></li>
         
-          <li><a href="docs/content/lang/ru/homepage.html">Homepage</a></li>
+          <li><a href="docs/reseed/content/lang/ko/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/pr/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/de/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/en/homepage.html">Homepage</a></li>
         
           <li><a href="docs/content/lang/zh/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/reseed/content/lang/hi/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/reseed/content/lang/id/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/hi/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/reseed/content/lang/es/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/bn/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/es/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/fr/homepage.html">Homepage</a></li>
+        
+          <li><a href="docs/content/lang/ru/homepage.html">Homepage</a></li>
         
           <li><a href="docs/reseed/content/lang/ar/homepage.html">Homepage</a></li>
         
@@ -104,9 +106,9 @@
         
           <li><a href="docs/docs/REMOTE-SSH.html">REMOTE SSH</a></li>
         
-          <li><a href="docs/doc-pak/docs/SERVICES.html">Service Integration</a></li>
-        
           <li><a href="docs/docs/SERVICES.html">Service Integration</a></li>
+        
+          <li><a href="docs/doc-pak/docs/SERVICES.html">Service Integration</a></li>
         
           <li><a href="docs/doc-pak/docs/TLS.html">TLS</a></li>
         
@@ -132,12 +134,12 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>487 commits</span>
+          <span>📝</span> <span>500 commits</span>
         </div>
         
         
         <div class="repo-stat">
-          <span>📅</span> <span>Last updated: July 16, 2025</span>
+          <span>📅</span> <span>Last updated: August 16, 2025</span>
         </div>
         
         
@@ -190,6 +192,47 @@ make build
 # Optionally, if you want to install to /usr/bin/reseed-tools
 sudo make install
 </code></pre>
+
+<h2 id="logging-configuration">Logging Configuration</h2>
+
+<p>The reseed-tools uses structured logging with configurable verbosity levels via the <code>github.com/go-i2p/logger</code> package. Logging is controlled through environment variables:</p>
+
+<h3 id="environment-variables">Environment Variables</h3>
+
+<ul>
+<li><p><strong><code>DEBUG_I2P</code></strong>: Controls logging verbosity levels</p>
+
+<ul>
+<li><code>debug</code> - Enable debug level logging (most verbose)</li>
+<li><code>warn</code> - Enable warning level logging</li>
+<li><code>error</code> - Enable error level logging only</li>
+<li>Not set - Logging disabled (default)</li>
+</ul></li>
+
+<li><p><strong><code>WARNFAIL_I2P</code></strong>: Enable fast-fail mode for testing</p>
+
+<ul>
+<li><code>true</code> - Warnings and errors become fatal for robust testing</li>
+<li>Not set - Normal operation (default)</li>
+</ul></li>
+</ul>
+
+<h3 id="examples">Examples</h3>
+
+<pre><code class="language-bash"># Enable debug logging
+export DEBUG_I2P=debug
+./reseed-tools reseed --signer=you@mail.i2p --netdb=/home/i2p/.i2p/netDb
+
+# Enable warning/error logging with fast-fail for testing
+export DEBUG_I2P=warn
+export WARNFAIL_I2P=true
+./reseed-tools reseed --signer=you@mail.i2p --netdb=/home/i2p/.i2p/netDb
+
+# Production mode (no logging)
+./reseed-tools reseed --signer=you@mail.i2p --netdb=/home/i2p/.i2p/netDb
+</code></pre>
+
+<p>The structured logging provides rich context for debugging I2P network operations, server startup, and file processing while maintaining zero performance impact in production when logging is disabled.</p>
 
 <h2 id="usage">Usage</h2>
 
@@ -245,7 +288,7 @@ Afterwards an HTTPS reseed server will start on the default port and generate 6 
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                281 commits
+                294 commits
               </div>
             </div>
           </div>
@@ -317,7 +360,7 @@ Afterwards an HTTPS reseed server will start on the default port and generate 6 
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2025-08-16 05:15:11 • <a href="https://github.com/go-i2p/reseed-tools" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2025-08-16 06:21:32 • <a href="https://github.com/go-i2p/reseed-tools" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
