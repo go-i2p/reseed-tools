@@ -7,9 +7,9 @@ require (
 	github.com/eyedeekay/go-i2pd v0.0.0-20220213070306-9807541b2dfc
 	github.com/eyedeekay/unembed v0.0.0-20230123014222-9916b121855b
 	github.com/go-acme/lego/v4 v4.3.1
-	github.com/go-i2p/checki2cp v0.0.0-20250223011251-79201ef39571
+	github.com/go-i2p/checki2cp v0.0.0-20250819195740-b291d85268db
 	github.com/go-i2p/common v0.0.0-20250819190749-01946d9f7ccf
-	github.com/go-i2p/i2pkeys v0.33.10-0.20241113193422-e10de5e60708
+	github.com/go-i2p/i2pkeys v0.33.92
 	github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c
 	github.com/go-i2p/onramp v0.33.92
 	github.com/go-i2p/sam3 v0.33.92
@@ -30,6 +30,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.0 // indirect
 	github.com/go-i2p/crypto v0.0.0-20250715200104-0ce55885b9cf // indirect
+	github.com/go-i2p/go-i2cp v0.0.0-20250601224458-294b34da9f76 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/miekg/dns v1.1.40 // indirect
@@ -49,7 +50,7 @@ require (
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 )
 
