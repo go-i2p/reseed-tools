@@ -138,7 +138,7 @@ func (rs *ReseederImpl) rebuild() error {
 	for gs := range su3Chan {
 		data, err := gs.MarshalBinary()
 		if nil != err {
-			return err
+			return fmt.Errorf("error marshaling gs: %s", err)
 		}
 
 		newSu3s = append(newSu3s, data)
@@ -296,8 +296,13 @@ func (db *LocalNetDbImpl) RouterInfos() (routerInfos []routerInfo, err error) {
 			continue
 		}
 
-		// skip crappy routerInfos
-		if riStruct.Reachable() && riStruct.UnCongested() && riStruct.GoodVersion() {
+		// skip crappy routerInfos (temporarily bypass GoodVersion check)
+		// TEMPORARY: Accept all reachable routers regardless of version
+		gv, err := riStruct.GoodVersion()
+		if err != nil {
+			lgr.WithError(err).WithField("path", path).Error("RouterInfo GoodVersion Error")
+		}
+		if riStruct.Reachable() && riStruct.UnCongested() && gv {
 			routerInfos = append(routerInfos, routerInfo{
 				Name:    file.Name(),
 				ModTime: file.ModTime(),

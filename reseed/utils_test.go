@@ -314,7 +314,7 @@ func TestKeyStore_ReseederCertificate(t *testing.T) {
 	signer := "test@example.com"
 	certFileName := SignerFilename(signer)
 	reseedDir := filepath.Join(tmpDir, "reseed")
-	err = os.MkdirAll(reseedDir, 0755)
+	err = os.MkdirAll(reseedDir, 0o755)
 	if err != nil {
 		t.Fatalf("Failed to create reseed dir: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestKeyStore_ReseederCertificate(t *testing.T) {
 	certFile := filepath.Join(reseedDir, certFileName)
 	pemBlock := &pem.Block{Type: "CERTIFICATE", Bytes: certBytes}
 	pemBytes := pem.EncodeToMemory(pemBlock)
-	err = os.WriteFile(certFile, pemBytes, 0644)
+	err = os.WriteFile(certFile, pemBytes, 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write certificate file: %v", err)
 	}
@@ -388,7 +388,7 @@ func TestKeyStore_DirReseederCertificate(t *testing.T) {
 	signer := "test@example.com"
 	certFileName := SignerFilename(signer)
 	certDir := filepath.Join(tmpDir, customDir)
-	err = os.MkdirAll(certDir, 0755)
+	err = os.MkdirAll(certDir, 0o755)
 	if err != nil {
 		t.Fatalf("Failed to create cert dir: %v", err)
 	}
@@ -407,7 +407,7 @@ func TestKeyStore_DirReseederCertificate(t *testing.T) {
 	certFile := filepath.Join(certDir, certFileName)
 	pemBlock := &pem.Block{Type: "CERTIFICATE", Bytes: certBytes}
 	pemBytes := pem.EncodeToMemory(pemBlock)
-	err = os.WriteFile(certFile, pemBytes, 0644)
+	err = os.WriteFile(certFile, pemBytes, 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write certificate file: %v", err)
 	}
@@ -441,7 +441,7 @@ func TestKeyStore_ReseederCertificate_InvalidPEM(t *testing.T) {
 	signer := "test@example.com"
 	certFileName := SignerFilename(signer)
 	reseedDir := filepath.Join(tmpDir, "reseed")
-	err = os.MkdirAll(reseedDir, 0755)
+	err = os.MkdirAll(reseedDir, 0o755)
 	if err != nil {
 		t.Fatalf("Failed to create reseed dir: %v", err)
 	}
@@ -453,7 +453,7 @@ aW52YWxpZGNlcnRpZmljYXRlZGF0YQ==
 -----END CERTIFICATE-----`
 
 	certFile := filepath.Join(reseedDir, certFileName)
-	err = os.WriteFile(certFile, []byte(invalidPEM), 0644)
+	err = os.WriteFile(certFile, []byte(invalidPEM), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write invalid certificate file: %v", err)
 	}
@@ -476,14 +476,14 @@ func TestKeyStore_ReseederCertificate_NonPEMData(t *testing.T) {
 	signer := "test@example.com"
 	certFileName := SignerFilename(signer)
 	reseedDir := filepath.Join(tmpDir, "reseed")
-	err = os.MkdirAll(reseedDir, 0755)
+	err = os.MkdirAll(reseedDir, 0o755)
 	if err != nil {
 		t.Fatalf("Failed to create reseed dir: %v", err)
 	}
 
 	// Write completely invalid data that can't be parsed as PEM
 	certFile := filepath.Join(reseedDir, certFileName)
-	err = os.WriteFile(certFile, []byte("completely invalid certificate data"), 0644)
+	err = os.WriteFile(certFile, []byte("completely invalid certificate data"), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write invalid certificate file: %v", err)
 	}

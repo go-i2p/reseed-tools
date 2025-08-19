@@ -133,7 +133,7 @@ func NewReseedCommand() *cli.Command {
 			},
 			&cli.IntFlag{
 				Name:  "numRi",
-				Value: 77,
+				Value: 25,
 				Usage: "Number of routerInfos to include in each su3 file",
 			},
 			&cli.IntFlag{
@@ -829,7 +829,7 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 
 	// Handle the first error that occurs
 	if err := <-errChan; err != nil {
-		lgr.WithError(err).Fatal("Fatal server error")
+		lgr.WithError(err).Fatal("Fatal server error", err)
 	}
 }
 

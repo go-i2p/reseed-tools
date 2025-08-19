@@ -30,7 +30,7 @@ func TestLocalNetDb_ConfigurableRouterInfoAge(t *testing.T) {
 	now := time.Now()
 	for _, file := range files {
 		filePath := filepath.Join(tempDir, file.name)
-		err := os.WriteFile(filePath, []byte("dummy router info data"), 0644)
+		err := os.WriteFile(filePath, []byte("dummy router info data"), 0o644)
 		if err != nil {
 			t.Fatalf("Failed to create test file %s: %v", file.name, err)
 		}

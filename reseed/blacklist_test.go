@@ -137,7 +137,7 @@ func TestBlacklist_LoadFile_Success(t *testing.T) {
 	tempFile := filepath.Join(tempDir, "blacklist.txt")
 
 	ipList := "192.168.1.1\n192.168.1.2\n10.0.0.1\n127.0.0.1"
-	err := os.WriteFile(tempFile, []byte(ipList), 0644)
+	err := os.WriteFile(tempFile, []byte(ipList), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestBlacklist_LoadFile_EmptyFile(t *testing.T) {
 	tempDir := t.TempDir()
 	tempFile := filepath.Join(tempDir, "empty_blacklist.txt")
 
-	err := os.WriteFile(tempFile, []byte(""), 0644)
+	err := os.WriteFile(tempFile, []byte(""), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -191,7 +191,6 @@ func TestBlacklist_LoadFile_FileNotFound(t *testing.T) {
 func TestBlacklist_LoadFile_EmptyString(t *testing.T) {
 	bl := NewBlacklist()
 	err := bl.LoadFile("")
-
 	if err != nil {
 		t.Errorf("LoadFile() should not fail with empty filename: %v", err)
 	}
@@ -208,7 +207,7 @@ func TestBlacklist_LoadFile_WithWhitespace(t *testing.T) {
 
 	// File with various whitespace scenarios
 	ipList := "192.168.1.1\n\n192.168.1.2\n   \n10.0.0.1\n"
-	err := os.WriteFile(tempFile, []byte(ipList), 0644)
+	err := os.WriteFile(tempFile, []byte(ipList), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}

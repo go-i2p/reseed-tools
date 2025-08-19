@@ -215,7 +215,7 @@ func (srv *Server) reseedHandler(w http.ResponseWriter, r *http.Request) {
 
 	su3Bytes, err := srv.Reseeder.PeerSu3Bytes(peer)
 	if nil != err {
-		lgr.WithError(err).WithField("peer", peer).Error("Error serving su3")
+		lgr.WithError(err).WithField("peer", peer).Error("Error serving su3 %s", err)
 		http.Error(w, "500 Unable to serve su3", http.StatusInternalServerError)
 		return
 	}
@@ -244,6 +244,7 @@ func (srv *Server) browsingMiddleware(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		if srv.CheckAcceptable(r.FormValue("onetime")) {
 			srv.reseedHandler(w, r)
+			return
 		}
 		if I2pUserAgent != r.UserAgent() {
 			srv.HandleARealBrowser(w, r)

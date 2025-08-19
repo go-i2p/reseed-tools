@@ -29,7 +29,7 @@ host:
 	/usr/bin/go build -o reseed-tools-host 2>/dev/null 1>/dev/null
 
 testrun:
-	go run . reseed --yes --signer=example@mail.i2p
+	DEBUG_I2P=debug go run . reseed --yes --signer=example@mail.i2p
 
 index:
 	edgar

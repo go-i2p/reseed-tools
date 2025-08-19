@@ -32,7 +32,7 @@ func TestSharer(t *testing.T) {
 
 	// Create a test file in the netdb directory
 	testFile := filepath.Join(tempDir, "routerInfo-test.dat")
-	err = os.WriteFile(testFile, []byte("test router info data"), 0644)
+	err = os.WriteFile(testFile, []byte("test router info data"), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
@@ -82,12 +82,12 @@ func TestWalker(t *testing.T) {
 	testFile1 := filepath.Join(tempDir, "routerInfo-test1.dat")
 	testFile2 := filepath.Join(tempDir, "routerInfo-test2.dat")
 
-	err = os.WriteFile(testFile1, []byte("test router info 1"), 0644)
+	err = os.WriteFile(testFile1, []byte("test router info 1"), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create test file 1: %v", err)
 	}
 
-	err = os.WriteFile(testFile2, []byte("test router info 2"), 0644)
+	err = os.WriteFile(testFile2, []byte("test router info 2"), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create test file 2: %v", err)
 	}
