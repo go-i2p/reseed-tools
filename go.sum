@@ -126,14 +126,6 @@ github.com/go-gl/glfw/v3.3/glfw v0.0.0-20191125211704-12ad95a8df72/go.mod h1:tQ2
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20200222043503-6f7a984d4dc4/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/go-i2p/checki2cp v0.0.0-20250223011251-79201ef39571 h1:l/mJzTbwzgycCvv6rGdgGERQleR1J6SpZJ6LZr5yCz4=
 github.com/go-i2p/checki2cp v0.0.0-20250223011251-79201ef39571/go.mod h1:h2Ufc73Qvj+KTkOz6H+JSS4XA7fM/Smqp593daAQNOc=
-github.com/go-i2p/common v0.0.0-20250715225440-81304a33d089 h1:0utYCHBgLyq+vD0cKsAZRtp+KR0grkCYnBLiFeX00h4=
-github.com/go-i2p/common v0.0.0-20250715225440-81304a33d089/go.mod h1:GD6iti2YU9LPrcESZ6Ty3lgxKGO7324tPhuKfYsJxrQ=
-github.com/go-i2p/common v0.0.0-20250721201453-82dbac8609ad h1:c2LsIHpVyfkGZmq5CEDSQt79rt8Ar0GqZP+ytgNUt0U=
-github.com/go-i2p/common v0.0.0-20250721201453-82dbac8609ad/go.mod h1:GD6iti2YU9LPrcESZ6Ty3lgxKGO7324tPhuKfYsJxrQ=
-github.com/go-i2p/common v0.0.0-20250818022628-29c21a5820dd h1:r5stqlNf3EmGtc5bSPxIvb3iSzCMjrmjHopIrfugZhY=
-github.com/go-i2p/common v0.0.0-20250818022628-29c21a5820dd/go.mod h1:GD6iti2YU9LPrcESZ6Ty3lgxKGO7324tPhuKfYsJxrQ=
-github.com/go-i2p/common v0.0.0-20250818024047-73e1838a7aeb h1:SpQ6C12eF9g2Ew92aSf1RiSCmmtLYdT+oSXOwMWwkgI=
-github.com/go-i2p/common v0.0.0-20250818024047-73e1838a7aeb/go.mod h1:GD6iti2YU9LPrcESZ6Ty3lgxKGO7324tPhuKfYsJxrQ=
 github.com/go-i2p/common v0.0.0-20250819190749-01946d9f7ccf h1:rWDND6k+wt1jo96H8oZEphSu9Ig9UPGodR94azDRfxo=
 github.com/go-i2p/common v0.0.0-20250819190749-01946d9f7ccf/go.mod h1:GD6iti2YU9LPrcESZ6Ty3lgxKGO7324tPhuKfYsJxrQ=
 github.com/go-i2p/crypto v0.0.0-20250715200104-0ce55885b9cf h1:R7SX3WbuYX2YH9wCzNup2GY6efLN0j8BRbyeskDYWn8=

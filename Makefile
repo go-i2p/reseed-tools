@@ -1,7 +1,7 @@
 
 VERSION=$(shell /usr/bin/go run . version 2>/dev/null)
 APP=reseed-tools
-USER_GH=eyedeekay
+USER_GH=go-i2p
 SIGNER=hankhill19580@gmail.com
 CGO_ENABLED=0
 export CGO_ENABLED=0
@@ -194,7 +194,7 @@ tmp/lib:
 tmp/LICENSE:
 	cp LICENSE tmp/LICENSE
 
-SIGNER_DIR=$(HOME)/i2p-go-keys/
+SIGNER_DIR=$(HOME)/i2p-go-keys.bak/
 
 su3s: tmp/content tmp/lib tmp/LICENSE build
 	rm -f plugin.yaml client.yaml
