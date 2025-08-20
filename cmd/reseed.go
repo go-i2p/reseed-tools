@@ -870,78 +870,112 @@ func getSupplementalNetDb(remote, password, path, samaddr string) {
 	}
 }
 
-func downloadRemoteNetDB(remote, password, path, samaddr string) error {
+// normalizeRemoteURL ensures the remote URL has proper HTTP protocol and netDb.tar.gz suffix.
+func normalizeRemoteURL(remote string) (string, error) {
 	var hremote string
-	if !strings.HasPrefix("http://", remote) && !strings.HasPrefix("https://", remote) {
+	if !strings.HasPrefix(remote, "http://") && !strings.HasPrefix(remote, "https://") {
 		hremote = "http://" + remote
+	} else {
+		hremote = remote
 	}
 	if !strings.HasSuffix(hremote, ".tar.gz") {
 		hremote += "/netDb.tar.gz"
 	}
-	url, err := url.Parse(hremote)
-	if err != nil {
-		return err
-	}
-	httpRequest := http.Request{
-		URL:    url,
-		Header: http.Header{},
-	}
+	return hremote, nil
+}
+
+// createGarlicHTTPClient creates an HTTP client configured to use I2P's SAM interface.
+func createGarlicHTTPClient(samaddr, password string) (*http.Client, *onramp.Garlic, error) {
 	garlic, err := onramp.NewGarlic("reseed-client", samaddr, onramp.OPT_WIDE)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	defer garlic.Close()
-	httpRequest.Header.Add(http.CanonicalHeaderKey("reseed-password"), password)
-	httpRequest.Header.Add(http.CanonicalHeaderKey("x-user-agent"), reseed.I2pUserAgent)
 	transport := http.Transport{
 		Dial: garlic.Dial,
 	}
 	client := http.Client{
 		Transport: &transport,
 	}
-	if resp, err := client.Do(&httpRequest); err != nil {
-		return err
-	} else {
-		if bodyBytes, err := ioutil.ReadAll(resp.Body); err != nil {
-			return err
-		} else {
-			if err := ioutil.WriteFile("netDb.tar.gz", bodyBytes, 0o644); err != nil {
-				return err
-			} else {
-				dbPath := filepath.Join(path, "reseed-netDb")
-				if err := untar.UntarFile("netDb.tar.gz", dbPath); err != nil {
-					return err
-				} else {
-					// For example...
-					opt := copy.Options{
-						Skip: func(info os.FileInfo, src, dest string) (bool, error) {
-							srcBase := filepath.Base(src)
-							dstBase := filepath.Base(dest)
-							if info.IsDir() {
-								return false, nil
-							}
-							if srcBase == dstBase {
-								log.Println("Ignoring existing RI", srcBase, dstBase)
-								return true, nil
-							}
-							return false, nil
-						},
-					}
-					if err := copy.Copy(dbPath, path, opt); err != nil {
-						return err
-					} else {
-						if err := os.RemoveAll(dbPath); err != nil {
-							return err
-						} else {
-							if err := os.RemoveAll("netDb.tar.gz"); err != nil {
-								return err
-							}
-							return nil
-						}
-					}
-				}
-			}
-		}
+	return &client, garlic, nil
+}
+
+// downloadAndSaveNetDB downloads the netDb archive from the remote URL and saves it locally.
+func downloadAndSaveNetDB(client *http.Client, url *url.URL, password string) error {
+	httpRequest := http.Request{
+		URL:    url,
+		Header: http.Header{},
 	}
+	httpRequest.Header.Add(http.CanonicalHeaderKey("reseed-password"), password)
+	httpRequest.Header.Add(http.CanonicalHeaderKey("x-user-agent"), reseed.I2pUserAgent)
+
+	resp, err := client.Do(&httpRequest)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile("netDb.tar.gz", bodyBytes, 0o644)
+}
+
+// extractAndCopyNetDB extracts the netDb archive and copies it to the target directory.
+func extractAndCopyNetDB(path string) error {
+	dbPath := filepath.Join(path, "reseed-netDb")
+	if err := untar.UntarFile("netDb.tar.gz", dbPath); err != nil {
+		return err
+	}
+
+	opt := copy.Options{
+		Skip: func(info os.FileInfo, src, dest string) (bool, error) {
+			srcBase := filepath.Base(src)
+			dstBase := filepath.Base(dest)
+			if info.IsDir() {
+				return false, nil
+			}
+			if srcBase == dstBase {
+				log.Println("Ignoring existing RI", srcBase, dstBase)
+				return true, nil
+			}
+			return false, nil
+		},
+	}
+
+	if err := copy.Copy(dbPath, path, opt); err != nil {
+		return err
+	}
+
+	// Clean up temporary files
+	if err := os.RemoveAll(dbPath); err != nil {
+		return err
+	}
+	return os.RemoveAll("netDb.tar.gz")
+}
+
+func downloadRemoteNetDB(remote, password, path, samaddr string) error {
+	hremote, err := normalizeRemoteURL(remote)
+	if err != nil {
+		return err
+	}
+
+	url, err := url.Parse(hremote)
+	if err != nil {
+		return err
+	}
+
+	client, garlic, err := createGarlicHTTPClient(samaddr, password)
+	if err != nil {
+		return err
+	}
+	defer garlic.Close()
+
+	if err := downloadAndSaveNetDB(client, url, password); err != nil {
+		return err
+	}
+
+	return extractAndCopyNetDB(path)
 }
