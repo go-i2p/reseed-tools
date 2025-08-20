@@ -472,52 +472,78 @@ func setupI2PKeys(c *cli.Context, tlsConfig *tlsConfiguration) (i2pkeys.I2PKeys,
 	return i2pkey, nil
 }
 
+// loadOrGenerateOnionKey loads an existing onion key from file or generates a new one.
+func loadOrGenerateOnionKey(keyPath string) ([]byte, error) {
+	if _, err := os.Stat(keyPath); err == nil {
+		key, err := ioutil.ReadFile(keyPath)
+		if err != nil {
+			return nil, err
+		}
+		return key, nil
+	}
+
+	key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(key.PrivateKey()), nil
+}
+
+// configureOnionTlsHost sets up the onion TLS hostname if not already configured.
+func configureOnionTlsHost(tlsConfig *tlsConfiguration, onionKey []byte) {
+	if tlsConfig.onionTlsHost == "" {
+		tlsConfig.onionTlsHost = torutil.OnionServiceIDFromPrivateKey(ed25519.PrivateKey(onionKey)) + ".onion"
+	}
+}
+
+// configureOnionTlsPaths sets up default paths for TLS key and certificate files.
+func configureOnionTlsPaths(tlsConfig *tlsConfiguration) {
+	if tlsConfig.onionTlsKey == "" {
+		tlsConfig.onionTlsKey = tlsConfig.onionTlsHost + ".pem"
+	}
+
+	if tlsConfig.onionTlsCert == "" {
+		tlsConfig.onionTlsCert = tlsConfig.onionTlsHost + ".crt"
+	}
+}
+
+// setupOnionTlsCertificate creates or validates TLS certificates for onion services.
+func setupOnionTlsCertificate(c *cli.Context, tlsConfig *tlsConfiguration) error {
+	if tlsConfig.onionTlsHost == "" {
+		return nil
+	}
+
+	auto := c.Bool("yes")
+	ignore := c.Bool("trustProxy")
+	if !ignore {
+		return checkOrNewTLSCert(tlsConfig.onionTlsHost, &tlsConfig.onionTlsCert, &tlsConfig.onionTlsKey, auto)
+	}
+	return nil
+}
+
 // setupOnionKeys configures Onion service keys and TLS certificates if Onion protocol is enabled.
 func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
-	if c.Bool("onion") {
-		var ok []byte
-		var err error
+	if !c.Bool("onion") {
+		return nil
+	}
 
-		if _, err = os.Stat(c.String("onionKey")); err == nil {
-			ok, err = ioutil.ReadFile(c.String("onionKey"))
-			if err != nil {
-				lgr.WithError(err).Fatal("Fatal error")
-			}
-		} else {
-			key, err := ed25519.GenerateKey(nil)
-			if err != nil {
-				lgr.WithError(err).Fatal("Fatal error")
-			}
-			ok = []byte(key.PrivateKey())
-		}
+	onionKey, err := loadOrGenerateOnionKey(c.String("onionKey"))
+	if err != nil {
+		lgr.WithError(err).Fatal("Fatal error")
+	}
 
-		if tlsConfig.onionTlsHost == "" {
-			tlsConfig.onionTlsHost = torutil.OnionServiceIDFromPrivateKey(ed25519.PrivateKey(ok)) + ".onion"
-		}
+	configureOnionTlsHost(tlsConfig, onionKey)
 
-		err = ioutil.WriteFile(c.String("onionKey"), ok, 0o644)
-		if err != nil {
-			lgr.WithError(err).Fatal("Fatal error")
-		}
+	err = ioutil.WriteFile(c.String("onionKey"), onionKey, 0o644)
+	if err != nil {
+		lgr.WithError(err).Fatal("Fatal error")
+	}
 
-		if tlsConfig.onionTlsHost != "" {
-			if tlsConfig.onionTlsKey == "" {
-				tlsConfig.onionTlsKey = tlsConfig.onionTlsHost + ".pem"
-			}
+	configureOnionTlsPaths(tlsConfig)
 
-			if tlsConfig.onionTlsCert == "" {
-				tlsConfig.onionTlsCert = tlsConfig.onionTlsHost + ".crt"
-			}
-
-			auto := c.Bool("yes")
-			ignore := c.Bool("trustProxy")
-			if !ignore {
-				err := checkOrNewTLSCert(tlsConfig.onionTlsHost, &tlsConfig.onionTlsCert, &tlsConfig.onionTlsKey, auto)
-				if err != nil {
-					lgr.WithError(err).Fatal("Fatal error")
-				}
-			}
-		}
+	err = setupOnionTlsCertificate(c, tlsConfig)
+	if err != nil {
+		lgr.WithError(err).Fatal("Fatal error")
 	}
 
 	return nil
