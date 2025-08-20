@@ -760,45 +760,46 @@ func reseedI2PWithContext(ctx context.Context, c *cli.Context, i2pTlsCert, i2pTl
 	}
 }
 
-// startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS) with proper coordination.
-func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-	errChan := make(chan error, 3) // Buffer for up to 3 server errors
-
-	// Start onion server if enabled
-	if c.Bool("onion") {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			lgr.WithField("service", "onion").Debug("Onion server starting")
-			if err := reseedOnionWithContext(ctx, c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder); err != nil {
-				select {
-				case errChan <- fmt.Errorf("onion server error: %w", err):
-				default:
-				}
-			}
-		}()
+// startOnionServer launches the onion server in a goroutine if enabled.
+func startOnionServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
+	if !c.Bool("onion") {
+		return
 	}
 
-	// Start I2P server if enabled
-	if c.Bool("i2p") {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			lgr.WithField("service", "i2p").Debug("I2P server starting")
-			if err := reseedI2PWithContext(ctx, c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder); err != nil {
-				select {
-				case errChan <- fmt.Errorf("i2p server error: %w", err):
-				default:
-				}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		lgr.WithField("service", "onion").Debug("Onion server starting")
+		if err := reseedOnionWithContext(ctx, c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder); err != nil {
+			select {
+			case errChan <- fmt.Errorf("onion server error: %w", err):
+			default:
 			}
-		}()
+		}
+	}()
+}
+
+// startI2PServer launches the I2P server in a goroutine if enabled.
+func startI2PServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
+	if !c.Bool("i2p") {
+		return
 	}
 
-	// Start HTTP/HTTPS server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		lgr.WithField("service", "i2p").Debug("I2P server starting")
+		if err := reseedI2PWithContext(ctx, c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder); err != nil {
+			select {
+			case errChan <- fmt.Errorf("i2p server error: %w", err):
+			default:
+			}
+		}
+	}()
+}
+
+// startHTTPServer launches the appropriate HTTP/HTTPS server in a goroutine.
+func startHTTPServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -820,7 +821,18 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 			}
 		}
 	}()
+}
 
+// setupServerContext initializes the context and error handling infrastructure for server coordination.
+func setupServerContext() (context.Context, context.CancelFunc, *sync.WaitGroup, chan error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	errChan := make(chan error, 3) // Buffer for up to 3 server errors
+	return ctx, cancel, &wg, errChan
+}
+
+// waitForServerCompletion coordinates server completion and error handling.
+func waitForServerCompletion(wg *sync.WaitGroup, errChan chan error) {
 	// Wait for first error or all servers to complete
 	go func() {
 		wg.Wait()
@@ -833,184 +845,16 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 	}
 }
 
-func reseedHTTPS(c *cli.Context, tlsCert, tlsKey string, reseeder *reseed.ReseederImpl) {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
-	server.Reseeder = reseeder
-	server.RequestRateLimit = c.Int("ratelimit")
-	server.WebRateLimit = c.Int("ratelimitweb")
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+// startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS) with proper coordination.
+func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
+	ctx, cancel, wg, errChan := setupServerContext()
+	defer cancel()
 
-	// load a blacklist
-	blacklist := reseed.NewBlacklist()
-	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
-	if "" != blacklistFile {
-		blacklist.LoadFile(blacklistFile)
-	}
+	startOnionServer(ctx, c, tlsConfig, reseeder, wg, errChan)
+	startI2PServer(ctx, c, tlsConfig, i2pkey, reseeder, wg, errChan)
+	startHTTPServer(ctx, c, tlsConfig, reseeder, wg, errChan)
 
-	// print stats once in a while
-	if c.Duration("stats") != 0 {
-		go func() {
-			var mem runtime.MemStats
-			for range time.Tick(c.Duration("stats")) {
-				runtime.ReadMemStats(&mem)
-				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
-			}
-		}()
-	}
-	lgr.WithField("address", server.Addr).Debug("HTTPS server started")
-	if err := server.ListenAndServeTLS(tlsCert, tlsKey); err != nil {
-		lgr.WithError(err).Fatal("Fatal error")
-	}
-}
-
-func reseedHTTP(c *cli.Context, reseeder *reseed.ReseederImpl) {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
-	server.RequestRateLimit = c.Int("ratelimit")
-	server.WebRateLimit = c.Int("ratelimitweb")
-	server.Reseeder = reseeder
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
-
-	// load a blacklist
-	blacklist := reseed.NewBlacklist()
-	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
-	if "" != blacklistFile {
-		blacklist.LoadFile(blacklistFile)
-	}
-
-	// print stats once in a while
-	if c.Duration("stats") != 0 {
-		go func() {
-			var mem runtime.MemStats
-			for range time.Tick(c.Duration("stats")) {
-				runtime.ReadMemStats(&mem)
-				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
-			}
-		}()
-	}
-	lgr.WithField("address", server.Addr).Debug("HTTP server started")
-	if err := server.ListenAndServe(); err != nil {
-		lgr.WithError(err).Fatal("Fatal error")
-	}
-}
-
-func reseedOnion(c *cli.Context, onionTlsCert, onionTlsKey string, reseeder *reseed.ReseederImpl) {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
-	server.Reseeder = reseeder
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
-
-	// load a blacklist
-	blacklist := reseed.NewBlacklist()
-	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
-	if "" != blacklistFile {
-		blacklist.LoadFile(blacklistFile)
-	}
-
-	// print stats once in a while
-	if c.Duration("stats") != 0 {
-		go func() {
-			var mem runtime.MemStats
-			for range time.Tick(c.Duration("stats")) {
-				runtime.ReadMemStats(&mem)
-				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
-			}
-		}()
-	}
-	port, err := strconv.Atoi(c.String("port"))
-	if err != nil {
-		lgr.WithError(err).Fatal("Fatal error")
-	}
-	port += 1
-	if _, err := os.Stat(c.String("onionKey")); err == nil {
-		ok, err := ioutil.ReadFile(c.String("onionKey"))
-		if err != nil {
-			lgr.WithError(err).Fatal("Fatal error")
-		} else {
-			if onionTlsCert != "" && onionTlsKey != "" {
-				tlc := &tor.ListenConf{
-					LocalPort:    port,
-					Key:          ed25519.PrivateKey(ok),
-					RemotePorts:  []int{443},
-					Version3:     true,
-					NonAnonymous: c.Bool("singleOnion"),
-					DiscardKey:   false,
-				}
-				if err := server.ListenAndServeOnionTLS(nil, tlc, onionTlsCert, onionTlsKey); err != nil {
-					lgr.WithError(err).Fatal("Fatal error")
-				}
-			} else {
-				tlc := &tor.ListenConf{
-					LocalPort:    port,
-					Key:          ed25519.PrivateKey(ok),
-					RemotePorts:  []int{80},
-					Version3:     true,
-					NonAnonymous: c.Bool("singleOnion"),
-					DiscardKey:   false,
-				}
-				if err := server.ListenAndServeOnion(nil, tlc); err != nil {
-					lgr.WithError(err).Fatal("Fatal error")
-				}
-
-			}
-		}
-	} else if os.IsNotExist(err) {
-		tlc := &tor.ListenConf{
-			LocalPort:    port,
-			RemotePorts:  []int{80},
-			Version3:     true,
-			NonAnonymous: c.Bool("singleOnion"),
-			DiscardKey:   false,
-		}
-		if err := server.ListenAndServeOnion(nil, tlc); err != nil {
-			lgr.WithError(err).Fatal("Fatal error")
-		}
-	}
-	lgr.WithField("address", server.Addr).Debug("Onion server started")
-}
-
-func reseedI2P(c *cli.Context, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"))
-	server.RequestRateLimit = c.Int("ratelimit")
-	server.WebRateLimit = c.Int("ratelimitweb")
-	server.Reseeder = reseeder
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
-
-	// load a blacklist
-	blacklist := reseed.NewBlacklist()
-	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
-	if "" != blacklistFile {
-		blacklist.LoadFile(blacklistFile)
-	}
-
-	// print stats once in a while
-	if c.Duration("stats") != 0 {
-		go func() {
-			var mem runtime.MemStats
-			for range time.Tick(c.Duration("stats")) {
-				runtime.ReadMemStats(&mem)
-				lgr.WithField("total_allocs_kb", mem.TotalAlloc/1024).WithField("allocs_kb", mem.Alloc/1024).WithField("mallocs", mem.Mallocs).WithField("num_gc", mem.NumGC).Debug("Memory stats")
-			}
-		}()
-	}
-	port, err := strconv.Atoi(c.String("port"))
-	if err != nil {
-		lgr.WithError(err).Fatal("Fatal error")
-	}
-	port += 1
-	if i2pTlsCert != "" && i2pTlsKey != "" {
-		if err := server.ListenAndServeI2PTLS(c.String("samaddr"), i2pIdentKey, i2pTlsCert, i2pTlsKey); err != nil {
-			lgr.WithError(err).Fatal("Fatal error")
-		}
-	} else {
-		if err := server.ListenAndServeI2P(c.String("samaddr"), i2pIdentKey); err != nil {
-			lgr.WithError(err).Fatal("Fatal error")
-		}
-	}
-
-	lgr.WithField("address", server.Addr).Debug("Onion server started")
+	waitForServerCompletion(wg, errChan)
 }
 
 func getSupplementalNetDb(remote, password, path, samaddr string) {
