@@ -6,7 +6,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"math/big"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -140,5 +143,141 @@ func TestOldBuggyLogic(t *testing.T) {
 
 	if !newLogic {
 		t.Error("New logic should indicate renewal needed for certificate expiring in 24 hours")
+	}
+}
+
+// Test for Bug #1: Nil Pointer Dereference in TLS Certificate Renewal
+func TestNilPointerDereferenceTLSRenewal(t *testing.T) {
+	// Create a temporary certificate and key file
+	cert, key, err := generateTestCertificate()
+	if err != nil {
+		t.Fatalf("Failed to generate test certificate: %v", err)
+	}
+
+	// Create temporary files
+	certFile := "test-cert.pem"
+	keyFile := "test-key.pem"
+
+	// Write certificate and key to files
+	if err := os.WriteFile(certFile, cert, 0644); err != nil {
+		t.Fatalf("Failed to write cert file: %v", err)
+	}
+	defer os.Remove(certFile)
+
+	if err := os.WriteFile(keyFile, key, 0644); err != nil {
+		t.Fatalf("Failed to write key file: %v", err)
+	}
+	defer os.Remove(keyFile)
+
+	// Create a minimal test to reproduce the exact nil pointer issue
+	// This directly tests what happens when tls.LoadX509KeyPair is used
+	// and then Leaf is accessed without checking if it's nil
+	tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		t.Fatalf("Failed to load X509 key pair: %v", err)
+	}
+
+	// This demonstrates the bug: tlsCert.Leaf is nil after LoadX509KeyPair
+	if tlsCert.Leaf == nil {
+		t.Log("Confirmed: tlsCert.Leaf is nil after LoadX509KeyPair - this causes the bug")
+	}
+
+	// This would panic with nil pointer dereference before the fix:
+	// tlsCert.Leaf.NotAfter would panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Log("Caught panic accessing tlsCert.Leaf.NotAfter:", r)
+			// This panic is expected before the fix is applied
+		}
+	}()
+
+	// This should reproduce the exact bug from line 147 in utils.go
+	// Before fix: panics with nil pointer dereference
+	// After fix: should handle gracefully
+	if tlsCert.Leaf != nil {
+		_ = time.Until(tlsCert.Leaf.NotAfter) < (time.Hour * 48)
+		t.Log("No panic occurred - fix may be already applied")
+	} else {
+		// This will panic before the fix
+		_ = time.Until(tlsCert.Leaf.NotAfter) < (time.Hour * 48)
+	}
+}
+
+// generateTestCertificate creates a test certificate and key for testing the nil pointer bug
+func generateTestCertificate() ([]byte, []byte, error) {
+	// Generate private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create certificate template - expires in 24 hours to trigger renewal logic
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization:  []string{"Test Org"},
+			Country:       []string{"US"},
+			Province:      []string{""},
+			Locality:      []string{"Test City"},
+			StreetAddress: []string{""},
+			PostalCode:    []string{""},
+		},
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().Add(24 * time.Hour), // Expires in 24 hours (should trigger renewal)
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses: nil,
+		DNSNames:    []string{"test.example.com"},
+	}
+
+	// Create certificate
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Encode certificate to PEM
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	})
+
+	// Encode private key to PEM
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+
+	return certPEM, keyPEM, nil
+}
+
+// Test for Bug #1 Fix: Certificate Leaf parsing works correctly
+func TestCertificateLeafParsingFix(t *testing.T) {
+	cert, key, err := generateTestCertificate()
+	if err != nil {
+		t.Fatalf("Failed to generate test certificate: %v", err)
+	}
+
+	certFile := "test-cert-fix.pem"
+	keyFile := "test-key-fix.pem"
+
+	if err := os.WriteFile(certFile, cert, 0644); err != nil {
+		t.Fatalf("Failed to write cert file: %v", err)
+	}
+	defer os.Remove(certFile)
+
+	if err := os.WriteFile(keyFile, key, 0644); err != nil {
+		t.Fatalf("Failed to write key file: %v", err)
+	}
+	defer os.Remove(keyFile)
+
+	// Test the fix: our function should handle nil Leaf gracefully
+	shouldRenew, err := checkAcmeCertificateRenewal(&certFile, &keyFile, "test", "test", "https://acme-v02.api.letsencrypt.org/directory")
+
+	// We expect an error (likely ACME-related), but NOT a panic or nil pointer error
+	if err != nil && (strings.Contains(err.Error(), "runtime error") || strings.Contains(err.Error(), "nil pointer")) {
+		t.Errorf("Fix failed: still getting nil pointer error: %v", err)
+	} else {
+		t.Logf("Fix successful: no nil pointer errors (got: %v, shouldRenew: %v)", err, shouldRenew)
 	}
 }

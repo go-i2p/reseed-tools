@@ -144,8 +144,17 @@ func checkAcmeCertificateRenewal(tlsCert, tlsKey *string, tlsHost, signer, cadir
 		return false, err
 	}
 
+	// Parse the certificate to populate the Leaf field if it's nil
+	if tlsConfig.Certificates[0].Leaf == nil && len(tlsConfig.Certificates[0].Certificate) > 0 {
+		cert, err := x509.ParseCertificate(tlsConfig.Certificates[0].Certificate[0])
+		if err != nil {
+			return false, fmt.Errorf("failed to parse certificate: %w", err)
+		}
+		tlsConfig.Certificates[0].Leaf = cert
+	}
+
 	// Check if certificate expires within 48 hours (time until expiration < 48 hours)
-	if time.Until(tlsConfig.Certificates[0].Leaf.NotAfter) < (time.Hour * 48) {
+	if tlsConfig.Certificates[0].Leaf != nil && time.Until(tlsConfig.Certificates[0].Leaf.NotAfter) < (time.Hour*48) {
 		return renewExistingAcmeCertificate(tlsHost, signer, cadirurl, tlsCert, tlsKey)
 	}
 
