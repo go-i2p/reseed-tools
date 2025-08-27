@@ -215,13 +215,13 @@ func (rs *ReseederImpl) PeerSu3Bytes(peer Peer) ([]byte, error) {
 	m := rs.su3s.Load().([][]byte)
 
 	if len(m) == 0 {
-		return nil, errors.New("404")
+		return nil, errors.New("502: Internal service error, no reseed file available")
 	}
 
 	// Additional safety: ensure index is valid (defense in depth)
 	index := int(peer.Hash()) % len(m)
 	if index < 0 || index >= len(m) {
-		return nil, errors.New("404")
+		return nil, errors.New("404: Reseed file not found")
 	}
 
 	return m[index], nil
