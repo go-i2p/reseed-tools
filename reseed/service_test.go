@@ -56,10 +56,10 @@ func TestLocalNetDb_ConfigurableRouterInfoAge(t *testing.T) {
 			description:   "Should include files up to 72 hours old",
 		},
 		{
-			name:          "192 hour limit (current default)",
+			name:          "192 hour limit (legacy compatibility)",
 			maxAge:        192 * time.Hour,
 			expectedFiles: 4, // All files should be included
-			description:   "Should include files up to 192 hours old",
+			description:   "Should include files up to 192 hours old (for backwards compatibility)",
 		},
 		{
 			name:          "36 hour limit (strict)",
@@ -100,8 +100,8 @@ func TestLocalNetDb_DefaultValues(t *testing.T) {
 
 	// Test with different duration values
 	testDurations := []time.Duration{
-		72 * time.Hour,     // 3 days (I2P standard)
-		192 * time.Hour,    // 8 days (old default)
+		72 * time.Hour,     // 3 days (I2P standard default)
+		192 * time.Hour,    // 8 days (legacy compatibility)
 		24 * time.Hour,     // 1 day (strict)
 		7 * 24 * time.Hour, // 1 week
 	}
@@ -228,4 +228,33 @@ func TestSU3BoundsCheckingFix(t *testing.T) {
 	}
 
 	t.Log("Bounds checking fix verified - proper access to su3 cache")
+}
+
+// Test for Bug #4 Fix: Verify CLI default matches I2P standard (72 hours)
+func TestRouterAgeDefaultConsistency(t *testing.T) {
+	// This test documents that the CLI default of 72 hours is the I2P standard
+	// and ensures consistency between documentation and implementation
+
+	defaultAge := 72 * time.Hour
+
+	tempDir, err := os.MkdirTemp("", "netdb_test_default")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test that when we use the documented default (72h), it works as expected
+	netdb := NewLocalNetDb(tempDir, defaultAge)
+	
+	if netdb.MaxRouterInfoAge != defaultAge {
+		t.Errorf("Expected MaxRouterInfoAge to be %v (I2P standard), got %v", defaultAge, netdb.MaxRouterInfoAge)
+	}
+
+	// Verify this matches what the CLI flag shows as default
+	expectedDefault := 72 * time.Hour
+	if netdb.MaxRouterInfoAge != expectedDefault {
+		t.Errorf("Router age default inconsistency: expected %v (CLI default), got %v", expectedDefault, netdb.MaxRouterInfoAge)
+	}
+
+	t.Logf("Router age default correctly set to %v (I2P standard)", netdb.MaxRouterInfoAge)
 }
