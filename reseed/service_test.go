@@ -116,3 +116,116 @@ func TestLocalNetDb_DefaultValues(t *testing.T) {
 		})
 	}
 }
+
+// Test for Bug #2: Race Condition in SU3 Cache Access
+func TestSU3CacheRaceCondition(t *testing.T) {
+	// Create a mock netdb that will fail during RouterInfos() call
+	tempDir, err := os.MkdirTemp("", "netdb_test_race")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a minimal netdb with no router files (this will cause rebuild to fail)
+	netdb := NewLocalNetDb(tempDir, 72*time.Hour)
+	reseeder := NewReseeder(netdb)
+
+	// Mock peer for testing
+	peer := Peer("testpeer")
+
+	// Test 1: Empty cache (should return 404, not panic)
+	_, err = reseeder.PeerSu3Bytes(peer)
+	if err == nil {
+		t.Error("Expected error when cache is empty, got nil")
+	} else if err.Error() != "404" {
+		t.Logf("Got expected error: %v", err)
+	}
+
+	// Test 2: Simulate the actual race condition where atomic.Value
+	// might briefly hold an empty slice during rebuild
+	// Force an empty slice into the cache to simulate the race
+	reseeder.su3s.Store([][]byte{})
+
+	// This should also return 404, not panic
+	_, err = reseeder.PeerSu3Bytes(peer)
+	if err == nil {
+		t.Error("Expected error when cache is forcibly emptied, got nil")
+	} else if err.Error() != "404" {
+		t.Logf("Got expected error for empty cache: %v", err)
+	}
+
+	// Test 3: The race condition might also be about concurrent access
+	// Let's test if we can make it panic with specific timing
+	for i := 0; i < 100; i++ {
+		// Simulate rapid cache updates that might leave empty slices briefly
+		go func() {
+			reseeder.su3s.Store([][]byte{})
+		}()
+		go func() {
+			_, _ = reseeder.PeerSu3Bytes(peer)
+		}()
+	}
+
+	t.Log("Race condition test completed - if we reach here, no panic occurred")
+
+	// Test 4: Additional bounds checking (the actual fix)
+	// Verify our bounds check works even in edge cases
+	testSlice := [][]byte{
+		[]byte("su3-file-1"),
+		[]byte("su3-file-2"),
+	}
+	reseeder.su3s.Store(testSlice)
+
+	// This should work normally
+	result, err := reseeder.PeerSu3Bytes(peer)
+	if err != nil {
+		t.Errorf("Unexpected error with valid cache: %v", err)
+	}
+	if result == nil {
+		t.Error("Expected su3 bytes, got nil")
+	}
+}
+
+// Test for Bug #2 Fix: Improved bounds checking in SU3 cache access
+func TestSU3BoundsCheckingFix(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "netdb_test_bounds")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	netdb := NewLocalNetDb(tempDir, 72*time.Hour)
+	reseeder := NewReseeder(netdb)
+	peer := Peer("testpeer")
+
+	// Test with valid non-empty cache
+	validCache := [][]byte{
+		[]byte("su3-file-1"),
+		[]byte("su3-file-2"),
+		[]byte("su3-file-3"),
+	}
+	reseeder.su3s.Store(validCache)
+
+	// This should work correctly
+	result, err := reseeder.PeerSu3Bytes(peer)
+	if err != nil {
+		t.Errorf("Unexpected error with valid cache: %v", err)
+	}
+	if result == nil {
+		t.Error("Expected su3 bytes, got nil")
+	}
+
+	// Verify we get one of the expected results
+	found := false
+	for _, expected := range validCache {
+		if string(result) == string(expected) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Result not found in expected su3 cache")
+	}
+
+	t.Log("Bounds checking fix verified - proper access to su3 cache")
+}

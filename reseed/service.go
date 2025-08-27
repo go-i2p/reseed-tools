@@ -218,7 +218,13 @@ func (rs *ReseederImpl) PeerSu3Bytes(peer Peer) ([]byte, error) {
 		return nil, errors.New("404")
 	}
 
-	return m[peer.Hash()%len(m)], nil
+	// Additional safety: ensure index is valid (defense in depth)
+	index := int(peer.Hash()) % len(m)
+	if index < 0 || index >= len(m) {
+		return nil, errors.New("404")
+	}
+
+	return m[index], nil
 }
 
 func (rs *ReseederImpl) createSu3(seeds []routerInfo) (*su3.File, error) {
