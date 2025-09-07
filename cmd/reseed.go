@@ -133,7 +133,7 @@ func NewReseedCommand() *cli.Command {
 			},
 			&cli.IntFlag{
 				Name:  "numRi",
-				Value: 25,
+				Value: 61,
 				Usage: "Number of routerInfos to include in each su3 file",
 			},
 			&cli.IntFlag{
