@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -279,5 +280,158 @@ func TestCertificateLeafParsingFix(t *testing.T) {
 		t.Errorf("Fix failed: still getting nil pointer error: %v", err)
 	} else {
 		t.Logf("Fix successful: no nil pointer errors (got: %v, shouldRenew: %v)", err, shouldRenew)
+	}
+}
+
+// TestLoadPrivateKey_NilPEMBlock verifies that loadPrivateKey returns a descriptive error
+// instead of panicking with a nil pointer dereference when the file contains no valid PEM data.
+func TestLoadPrivateKey_NilPEMBlock(t *testing.T) {
+	testCases := []struct {
+		name        string
+		content     []byte
+		errContains string
+	}{
+		{
+			name:        "empty file",
+			content:     []byte{},
+			errContains: "no valid PEM block found",
+		},
+		{
+			name:        "non-PEM data",
+			content:     []byte("this is not a PEM file at all"),
+			errContains: "no valid PEM block found",
+		},
+		{
+			name:        "corrupted PEM markers",
+			content:     []byte("-----INVALID HEADER-----\nnot valid\n-----END INVALID-----\n"),
+			errContains: "no valid PEM block found",
+		},
+		{
+			name:        "binary garbage",
+			content:     []byte{0x00, 0x01, 0x02, 0xFF, 0xFE, 0xFD},
+			errContains: "no valid PEM block found",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			keyPath := filepath.Join(tmpDir, "test.pem")
+			if err := os.WriteFile(keyPath, tc.content, 0o600); err != nil {
+				t.Fatalf("Failed to write test file: %v", err)
+			}
+
+			key, err := loadPrivateKey(keyPath)
+			if key != nil {
+				t.Error("Expected nil key for invalid PEM data, got non-nil")
+			}
+			if err == nil {
+				t.Fatal("Expected error for invalid PEM data, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.errContains) {
+				t.Errorf("Expected error containing %q, got: %v", tc.errContains, err)
+			}
+		})
+	}
+}
+
+// TestLoadPrivateKey_NonexistentFile verifies that loadPrivateKey returns an error
+// for a file that does not exist.
+func TestLoadPrivateKey_NonexistentFile(t *testing.T) {
+	key, err := loadPrivateKey("/nonexistent/path/to/key.pem")
+	if key != nil {
+		t.Error("Expected nil key for nonexistent file, got non-nil")
+	}
+	if err == nil {
+		t.Fatal("Expected error for nonexistent file, got nil")
+	}
+}
+
+// TestLoadPrivateKey_ValidKey verifies that loadPrivateKey successfully loads a valid RSA PEM key.
+func TestLoadPrivateKey_ValidKey(t *testing.T) {
+	// Generate a test RSA private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate RSA key: %v", err)
+	}
+
+	// Write key as PEM to a temp file
+	tmpDir := t.TempDir()
+	keyPath := filepath.Join(tmpDir, "valid.pem")
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write key file: %v", err)
+	}
+
+	loaded, err := loadPrivateKey(keyPath)
+	if err != nil {
+		t.Fatalf("Expected no error for valid key, got: %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("Expected non-nil key for valid PEM, got nil")
+	}
+	if loaded.N.Cmp(privateKey.N) != 0 {
+		t.Error("Loaded key does not match original key")
+	}
+}
+
+// TestLoadPrivateKey_WrongPEMType verifies that loadPrivateKey returns a parse error
+// (not a panic) when the PEM block type is valid but contains non-PKCS1 data.
+func TestLoadPrivateKey_WrongPEMType(t *testing.T) {
+	// Create a PEM block with CERTIFICATE type (not a private key)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate RSA key: %v", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{Organization: []string{"Test"}},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		t.Fatalf("Failed to create certificate: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	keyPath := filepath.Join(tmpDir, "cert.pem")
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	})
+	if err := os.WriteFile(keyPath, certPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+
+	key, err := loadPrivateKey(keyPath)
+	if key != nil {
+		t.Error("Expected nil key when PEM contains a certificate, got non-nil")
+	}
+	if err == nil {
+		t.Fatal("Expected parse error for certificate PEM, got nil")
+	}
+}
+
+// TestSignerFile verifies the filename-safe conversion of signer IDs.
+func TestSignerFile(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"user@mail.i2p", "user_at_mail.i2p"},
+		{"noatsign", "noatsign"},
+		{"multiple@at@signs", "multiple_at_at@signs"}, // only first @ replaced
+		{"", ""},
+	}
+	for _, tc := range testCases {
+		result := signerFile(tc.input)
+		if result != tc.expected {
+			t.Errorf("signerFile(%q) = %q, want %q", tc.input, result, tc.expected)
+		}
 	}
 }

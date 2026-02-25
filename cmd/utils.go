@@ -12,7 +12,6 @@ import (
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -29,13 +28,18 @@ import (
 )
 
 func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
-	privPem, err := ioutil.ReadFile(path)
+	privPem, err := os.ReadFile(path)
 	if nil != err {
 		lgr.WithError(err).WithField("key_path", path).Error("Failed to read private key file")
 		return nil, err
 	}
 
 	privDer, _ := pem.Decode(privPem)
+	if privDer == nil {
+		err := fmt.Errorf("no valid PEM block found in %s", path)
+		lgr.WithError(err).WithField("key_path", path).Error("Failed to decode PEM data")
+		return nil, err
+	}
 	privKey, err := x509.ParsePKCS1PrivateKey(privDer.Bytes)
 	if nil != err {
 		lgr.WithError(err).WithField("key_path", path).Error("Failed to parse private key")
@@ -160,7 +164,7 @@ func checkAcmeCertificateRenewal(tlsCert, tlsKey *string, tlsHost, signer, cadir
 
 // renewExistingAcmeCertificate loads existing ACME key and renews the certificate.
 func renewExistingAcmeCertificate(tlsHost, signer, cadirurl string, tlsCert, tlsKey *string) (bool, error) {
-	ecder, err := ioutil.ReadFile(tlsHost + signer + ".acme.key")
+	ecder, err := os.ReadFile(tlsHost + signer + ".acme.key")
 	if err != nil {
 		return false, err
 	}
@@ -253,9 +257,12 @@ func renewAcmeIssuedCert(client *lego.Client, user MyUser, tlsHost string, tlsCe
 		return err
 	}
 
-	ioutil.WriteFile(tlsHost+".pem", certificates.PrivateKey, 0o600)
-	ioutil.WriteFile(tlsHost+".crt", certificates.Certificate, 0o600)
-	//	ioutil.WriteFile(tlsHost+".crl", certificates.PrivateKey, 0600)
+	if err := os.WriteFile(tlsHost+".pem", certificates.PrivateKey, 0o600); err != nil {
+		return fmt.Errorf("failed to write renewed TLS private key to %s.pem: %w", tlsHost, err)
+	}
+	if err := os.WriteFile(tlsHost+".crt", certificates.Certificate, 0o600); err != nil {
+		return fmt.Errorf("failed to write renewed TLS certificate to %s.crt: %w", tlsHost, err)
+	}
 	*tlsCert = tlsHost + ".crt"
 	*tlsKey = tlsHost + ".pem"
 	return nil
@@ -290,9 +297,12 @@ func newAcmeIssuedCert(client *lego.Client, user MyUser, tlsHost string, tlsCert
 		return err
 	}
 
-	ioutil.WriteFile(tlsHost+".pem", certificates.PrivateKey, 0o600)
-	ioutil.WriteFile(tlsHost+".crt", certificates.Certificate, 0o600)
-	//	ioutil.WriteFile(tlsHost+".crl", certificates.PrivateKey, 0600)
+	if err := os.WriteFile(tlsHost+".pem", certificates.PrivateKey, 0o600); err != nil {
+		return fmt.Errorf("failed to write new TLS private key to %s.pem: %w", tlsHost, err)
+	}
+	if err := os.WriteFile(tlsHost+".crt", certificates.Certificate, 0o600); err != nil {
+		return fmt.Errorf("failed to write new TLS certificate to %s.crt: %w", tlsHost, err)
+	}
 	*tlsCert = tlsHost + ".crt"
 	*tlsKey = tlsHost + ".pem"
 	return nil
