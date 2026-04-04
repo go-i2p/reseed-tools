@@ -2,6 +2,7 @@ package reseed
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-i2p/go-sam-bridge/lib/embedding"
 	"github.com/go-i2p/onramp"
 	"github.com/gorilla/handlers"
 	"github.com/justinas/alice"
@@ -27,6 +29,8 @@ import (
 // router information to bootstrap new I2P nodes joining the network.
 type Server struct {
 	*http.Server
+
+	embeddedRouter *embedding.Bridge
 
 	// Reseeder handles the core reseed functionality and SU3 file generation
 	Reseeder *ReseederImpl
@@ -56,7 +60,7 @@ type Server struct {
 // It sets up TLS 1.3-only connections, proper cipher suites, and middleware chain for
 // request processing. The prefix parameter customizes URL paths and trustProxy enables
 // reverse proxy support for deployment behind load balancers or CDNs.
-func NewServer(prefix string, trustProxy bool) *Server {
+func NewServer(prefix string, trustProxy bool, samaddr string) *Server {
 	config := &tls.Config{
 		MinVersion:               tls.VersionTLS13,
 		PreferServerCipherSuites: true,
@@ -67,7 +71,22 @@ func NewServer(prefix string, trustProxy bool) *Server {
 		CurvePreferences: []tls.CurveID{tls.CurveP384, tls.CurveP521}, // default CurveP256 removed
 	}
 	h := &http.Server{TLSConfig: config}
+
 	server := Server{Server: h, Reseeder: nil}
+
+	var err error
+	server.embeddedRouter, err = server.newEmbeddedSAMBridge()
+	if err != nil {
+		lgr.WithError(err).Warn("Failed to create embedded SAM bridge, will attempt external SAM connection")
+	}
+	err = server.embeddedRouter.Start(context.Background())
+	if err != nil {
+		lgr.WithError(err).Warn("Failed to start embedded SAM bridge, will attempt external SAM connection")
+	}
+	server.Garlic, err = onramp.NewGarlic("reseed", samaddr, onramp.OPT_WIDE)
+	if err != nil {
+		lgr.WithError(err).Warn("Failed to create Garlic instance for I2P. will try again without embedded SAM bridge")
+	}
 
 	throttleSu3Handler := throttled.RateLimit(throttled.PerHour(4), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
 	throttleWebHandler := throttled.RateLimit(throttled.PerHour(30), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))

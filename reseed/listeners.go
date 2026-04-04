@@ -100,9 +100,11 @@ func (srv *Server) ListenAndServeOnion(startConf *tor.StartConf, listenConf *tor
 func (srv *Server) ListenAndServeI2PTLS(samaddr string, I2PKeys i2pkeys.I2PKeys, certFile, keyFile string) error {
 	lgr.WithField("service", "i2p-https").WithField("sam_address", samaddr).Debug("Starting and registering I2P HTTPS service, please wait a couple of minutes...")
 	var err error
-	srv.Garlic, err = onramp.NewGarlic("reseed-tls", samaddr, onramp.OPT_WIDE)
-	if err != nil {
-		return err
+	if srv.Garlic == nil {
+		srv.Garlic, err = onramp.NewGarlic("reseed", samaddr, onramp.OPT_WIDE)
+		if err != nil {
+			lgr.WithError(err).Warn("Failed to create Garlic instance for I2P")
+		}
 	}
 	srv.I2PListener, err = srv.Garlic.ListenTLS()
 	if err != nil {
@@ -117,9 +119,11 @@ func (srv *Server) ListenAndServeI2PTLS(samaddr string, I2PKeys i2pkeys.I2PKeys,
 func (srv *Server) ListenAndServeI2P(samaddr string, I2PKeys i2pkeys.I2PKeys) error {
 	lgr.WithField("service", "i2p-http").WithField("sam_address", samaddr).Debug("Starting and registering I2P service, please wait a couple of minutes...")
 	var err error
-	srv.Garlic, err = onramp.NewGarlic("reseed", samaddr, onramp.OPT_WIDE)
-	if err != nil {
-		return err
+	if srv.Garlic == nil {
+		srv.Garlic, err = onramp.NewGarlic("reseed", samaddr, onramp.OPT_WIDE)
+		if err != nil {
+			lgr.WithError(err).Warn("Failed to create Garlic instance for I2P")
+		}
 	}
 	srv.I2PListener, err = srv.Garlic.Listen()
 	if err != nil {
