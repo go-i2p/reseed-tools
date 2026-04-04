@@ -7,9 +7,11 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	//"flag"
 	"io/ioutil"
@@ -685,8 +687,20 @@ func reseedHTTPSWithContext(ctx context.Context, c *cli.Context, tlsCert, tlsKey
 		}()
 	}
 
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			lgr.WithError(err).Warn("Error during HTTPS server shutdown")
+		}
+	}()
+
 	lgr.WithField("address", server.Addr).Debug("HTTPS server started")
-	return server.ListenAndServeTLS(tlsCert, tlsKey)
+	if err := server.ListenAndServeTLS(tlsCert, tlsKey); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 func reseedHTTPWithContext(ctx context.Context, c *cli.Context, reseeder *reseed.ReseederImpl) error {
@@ -722,8 +736,20 @@ func reseedHTTPWithContext(ctx context.Context, c *cli.Context, reseeder *reseed
 		}()
 	}
 
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			lgr.WithError(err).Warn("Error during HTTP server shutdown")
+		}
+	}()
+
 	lgr.WithField("address", server.Addr).Debug("HTTP server started")
-	return server.ListenAndServe()
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 // setupOnionServer configures a new reseed server instance with blacklist support.
@@ -812,11 +838,28 @@ func reseedOnionWithContext(ctx context.Context, c *cli.Context, onionTlsCert, o
 		return err
 	}
 
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			lgr.WithError(err).Warn("Error during Onion server shutdown")
+		}
+	}()
+
 	if _, err := os.Stat(c.String("onionKey")); err == nil {
-		return handleOnionKeyBasedService(server, c, port, onionTlsCert, onionTlsKey)
+		err := handleOnionKeyBasedService(server, c, port, onionTlsCert, onionTlsKey)
+		if err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	} else if os.IsNotExist(err) {
 		tlc := createTorListenConf(port, nil, []int{80}, c.Bool("singleOnion"))
-		return server.ListenAndServeOnion(nil, tlc)
+		err := server.ListenAndServeOnion(nil, tlc)
+		if err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	}
 
 	return fmt.Errorf("onion key file error: %w", err)
@@ -831,7 +874,20 @@ func reseedI2PWithContext(ctx context.Context, c *cli.Context, i2pTlsCert, i2pTl
 
 	startI2PStatsMonitoring(ctx, c)
 
-	return startI2PServerListener(server, c, i2pTlsCert, i2pTlsKey, i2pIdentKey)
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			lgr.WithError(err).Warn("Error during I2P server shutdown")
+		}
+	}()
+
+	err := startI2PServerListener(server, c, i2pTlsCert, i2pTlsKey, i2pIdentKey)
+	if err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 // configureI2PReseederServer creates and configures a new reseed server for I2P networking.
@@ -984,9 +1040,23 @@ func waitForServerCompletion(wg *sync.WaitGroup, errChan chan error) {
 }
 
 // startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS) with proper coordination.
+// It installs an OS signal handler so that SIGINT or SIGTERM triggers a graceful shutdown of all servers.
 func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
 	ctx, cancel, wg, errChan := setupServerContext()
 	defer cancel()
+
+	// Watch for OS shutdown signals and propagate via context cancellation.
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(sigChan)
+		select {
+		case sig := <-sigChan:
+			lgr.WithField("signal", sig.String()).Info("Received shutdown signal, stopping servers")
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 
 	startOnionServer(ctx, c, tlsConfig, reseeder, wg, errChan)
 	startI2PServer(ctx, c, tlsConfig, i2pkey, reseeder, wg, errChan)

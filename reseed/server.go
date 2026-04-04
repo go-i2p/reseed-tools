@@ -147,6 +147,49 @@ func SecureRandomBytes(length int) []byte {
 	return randomBytes
 }
 
+// Shutdown gracefully stops the server and all associated resources, including
+// the embedded SAM bridge (if started), I2P/Onion tunnels, and the HTTP server.
+// The provided context controls the shutdown deadline for in-flight connections.
+func (srv *Server) Shutdown(ctx context.Context) error {
+	var firstErr error
+
+	if srv.embeddedRouter != nil && srv.embeddedRouter.Running() {
+		if err := srv.embeddedRouter.Stop(ctx); err != nil {
+			lgr.WithError(err).Warn("Error stopping embedded SAM bridge")
+			firstErr = err
+		}
+	}
+
+	if srv.Garlic != nil {
+		if err := srv.Garlic.Close(); err != nil {
+			lgr.WithError(err).Warn("Error closing I2P Garlic tunnel")
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
+	if srv.Onion != nil {
+		if err := srv.Onion.Close(); err != nil {
+			lgr.WithError(err).Warn("Error closing Onion tunnel")
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
+	if srv.Server != nil {
+		if err := srv.Server.Shutdown(ctx); err != nil {
+			lgr.WithError(err).Warn("Error during HTTP server shutdown")
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
+	return firstErr
+}
+
 // Address returns a string representation of all active listener addresses
 // (TCP, I2P, Onion) for this server instance.
 func (srv *Server) Address() string {
