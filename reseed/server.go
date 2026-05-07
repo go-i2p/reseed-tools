@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -330,8 +331,18 @@ func verifyMiddleware(next http.Handler) http.Handler {
 
 func proxiedMiddleware(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		if prior, ok := r.Header["X-Forwarded-For"]; ok {
-			r.RemoteAddr = prior[0]
+		if prior, ok := r.Header["X-Forwarded-For"]; ok && len(prior) > 0 {
+			// X-Forwarded-For can contain comma-separated IPs: "client, proxy1, proxy2"
+			// We want the leftmost (original client) IP address
+			ips := strings.Split(prior[0], ",")
+			if len(ips) > 0 {
+				clientIP := strings.TrimSpace(ips[0])
+				// Validate that it's a valid IP address before using it
+				if net.ParseIP(clientIP) != nil {
+					r.RemoteAddr = clientIP
+				}
+				// If invalid, leave r.RemoteAddr unchanged (use original value)
+			}
 		}
 
 		next.ServeHTTP(w, r)

@@ -1,12 +1,14 @@
 package reseed
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/crc32"
-	"math/rand"
+	rand2 "math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -66,6 +68,8 @@ type ReseederImpl struct {
 	RebuildInterval time.Duration
 	// NumSu3 specifies the number of pre-built SU3 files to maintain
 	NumSu3 int
+	// rebuildMu prevents concurrent rebuild operations that would cause goroutine accumulation
+	rebuildMu sync.Mutex
 }
 
 // NewReseeder creates a new reseed service instance with default configuration.
@@ -116,6 +120,10 @@ func (rs *ReseederImpl) Start() chan bool {
 }
 
 func (rs *ReseederImpl) rebuild() error {
+	// Prevent concurrent rebuilds which cause goroutine accumulation and CPU exhaustion
+	rs.rebuildMu.Lock()
+	defer rs.rebuildMu.Unlock()
+
 	lgr.WithField("operation", "rebuild").Debug("Rebuilding su3 cache...")
 
 	// get all RIs from netdb provider
@@ -128,7 +136,9 @@ func (rs *ReseederImpl) rebuild() error {
 	// exclusion of the same routers every rebuild (filepath.Walk returns
 	// files in lexicographic order, so without shuffling the first 25% by
 	// sorted filename are always dropped).
-	rand.Shuffle(len(ris), func(i, j int) { ris[i], ris[j] = ris[j], ris[i] })
+	// Use crypto/rand for secure seeding to avoid global mutex contention
+	rng := newSecureRand()
+	rng.Shuffle(len(ris), func(i, j int) { ris[i], ris[j] = ris[j], ris[i] })
 	ris = ris[len(ris)/4:]
 
 	// fail if we don't have enough RIs to make a single reseed file
@@ -137,7 +147,8 @@ func (rs *ReseederImpl) rebuild() error {
 	}
 
 	// build a pipeline ris -> seeds -> su3
-	seedsChan := rs.seedsProducer(ris)
+	// Pass thread-local RNG to avoid global mutex contention on math/rand
+	seedsChan := rs.seedsProducer(ris, rng)
 	// fan-in multiple builders
 	su3Chan := fanIn(rs.su3Builder(seedsChan), rs.su3Builder(seedsChan), rs.su3Builder(seedsChan))
 
@@ -160,7 +171,7 @@ func (rs *ReseederImpl) rebuild() error {
 	return nil
 }
 
-func (rs *ReseederImpl) seedsProducer(ris []routerInfo) <-chan []routerInfo {
+func (rs *ReseederImpl) seedsProducer(ris []routerInfo, rng *rand2.Rand) <-chan []routerInfo {
 	lenRis := len(ris)
 
 	// if NumSu3 is not specified, then we determine the "best" number based on the number of RIs
@@ -199,7 +210,8 @@ func (rs *ReseederImpl) seedsProducer(ris []routerInfo) <-chan []routerInfo {
 			// Partial Fisher-Yates: shuffle only first NumRi positions
 			seeds := make([]routerInfo, rs.NumRi)
 			for z := 0; z < rs.NumRi; z++ {
-				j := z + rand.Intn(lenRis-z)
+				// Use thread-local RNG to avoid global mutex contention
+				j := z + rng.Intn(lenRis-z)
 				indices[z], indices[j] = indices[j], indices[z]
 				seeds[z] = ris[indices[z]]
 			}
@@ -209,6 +221,22 @@ func (rs *ReseederImpl) seedsProducer(ris []routerInfo) <-chan []routerInfo {
 	}()
 
 	return out
+}
+
+// newSecureRand creates a new thread-local random number generator seeded with
+// cryptographically secure randomness. This avoids contention on the global
+// math/rand mutex which causes CPU exhaustion when multiple rebuild goroutines
+// run concurrently.
+func newSecureRand() *rand2.Rand {
+	var seed int64
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		// Fallback to time-based seed if crypto/rand fails
+		seed = time.Now().UnixNano()
+	} else {
+		seed = int64(binary.BigEndian.Uint64(buf))
+	}
+	return rand2.New(rand2.NewSource(seed))
 }
 
 func (rs *ReseederImpl) su3Builder(in <-chan []routerInfo) <-chan *su3.File {
