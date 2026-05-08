@@ -448,7 +448,7 @@ func TestSeedsProducer_ProducesCorrectCount(t *testing.T) {
 		ris[i] = routerInfo{Name: fmt.Sprintf("routerInfo-%d.dat", i), Data: []byte("data"), ModTime: time.Now()}
 	}
 
-	ch := reseeder.seedsProducer(ris)
+	ch := reseeder.seedsProducer(ris, mrand.New(mrand.NewSource(time.Now().UnixNano())))
 	var batches [][]routerInfo
 	for batch := range ch {
 		batches = append(batches, batch)
@@ -483,7 +483,7 @@ func TestSeedsProducer_NoDuplicatesWithinBatch(t *testing.T) {
 		ris[i] = routerInfo{Name: fmt.Sprintf("routerInfo-%04d.dat", i), Data: []byte("data"), ModTime: time.Now()}
 	}
 
-	ch := reseeder.seedsProducer(ris)
+	ch := reseeder.seedsProducer(ris, mrand.New(mrand.NewSource(time.Now().UnixNano())))
 	for batch := range ch {
 		seen := make(map[string]bool, len(batch))
 		for _, ri := range batch {
@@ -518,7 +518,7 @@ func TestSeedsProducer_UniformDistribution(t *testing.T) {
 
 	// Count how many times each router appears across all batches
 	freq := make(map[string]int, numRouters)
-	ch := reseeder.seedsProducer(ris)
+	ch := reseeder.seedsProducer(ris, mrand.New(mrand.NewSource(time.Now().UnixNano())))
 	for batch := range ch {
 		for _, ri := range batch {
 			freq[ri.Name]++
@@ -657,7 +657,7 @@ func TestSeedsProducer_AutomaticSu3Count(t *testing.T) {
 				ris[i] = routerInfo{Name: fmt.Sprintf("ri-%d.dat", i), Data: []byte("d"), ModTime: time.Now()}
 			}
 
-			ch := reseeder.seedsProducer(ris)
+			ch := reseeder.seedsProducer(ris, mrand.New(mrand.NewSource(time.Now().UnixNano())))
 			count := 0
 			for range ch {
 				count++
