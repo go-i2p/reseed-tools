@@ -1,0 +1,14 @@
+clientName: reseed-tools-linux-amd64
+clientDisplayName: Reseed Tools
+command: reseed-tools-linux-amd64 reseed --yes --signer=$PLUGIN/signer --port=7671
+commandArgs: ""
+stopCommand: ""
+delay: "1"
+start: true
+commandInPath: false
+executable: reseed-tools-linux-amd64
+javaShellService: net.i2p.router.web.ShellService
+noAutoSuffixWindows: false
+targetOS: linux
+resourceDir: tmp/
+i2ptunnelConfig: ""

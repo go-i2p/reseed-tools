@@ -133,7 +133,7 @@ plugins:
 	#export GOOS=darwin; export GOARCH=arm64; make su3s
 	export GOOS=linux; export GOARCH=amd64; make su3s
 	#export GOOS=linux; export GOARCH=386; make su3s
-	export GOOS=linux; export GOARCH=arm; make su3s
+	#export GOOS=linux; export GOARCH=arm; make su3s
 	export GOOS=linux; export GOARCH=arm64; make su3s
 	export GOOS=openbsd; export GOARCH=amd64; make su3s
 	#export GOOS=freebsd; export GOARCH=386; make su3s
@@ -144,7 +144,7 @@ plugins:
 debs:
 	export GOOS=linux; export GOARCH=amd64; make build checkinstall
 	#export GOOS=linux; export GOARCH=386; make build checkinstall
-	export GOOS=linux; export GOARCH=arm; make build checkinstall
+	#export GOOS=linux; export GOARCH=arm; make build checkinstall
 	export GOOS=linux; export GOARCH=arm64; make build checkinstall
 
 rm-su3s:
@@ -155,7 +155,7 @@ download-su3s:
 	#export GOOS=darwin; export GOARCH=arm64; make download-single-su3
 	#export GOOS=linux; export GOARCH=386; make download-single-su3
 	export GOOS=linux; export GOARCH=amd64; make download-single-su3
-	export GOOS=linux; export GOARCH=arm; make download-single-su3
+	#export GOOS=linux; export GOARCH=arm; make download-single-su3
 	export GOOS=linux; export GOARCH=arm64; make download-single-su3
 	export GOOS=openbsd; export GOARCH=amd64; make download-single-su3
 	#export GOOS=freebsd; export GOARCH=386; make download-single-su3
@@ -168,7 +168,7 @@ upload-su3s:
 	#export GOOS=darwin; export GOARCH=arm64; make upload-single-su3
 	#export GOOS=linux; export GOARCH=386; make upload-single-su3
 	export GOOS=linux; export GOARCH=amd64; make upload-single-su3
-	export GOOS=linux; export GOARCH=arm; make upload-single-su3
+	#export GOOS=linux; export GOARCH=arm; make upload-single-su3
 	export GOOS=linux; export GOARCH=arm64; make upload-single-su3
 	export GOOS=openbsd; export GOARCH=amd64; make upload-single-su3
 	#export GOOS=freebsd; export GOARCH=386; make upload-single-su3

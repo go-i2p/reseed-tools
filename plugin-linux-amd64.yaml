@@ -1,0 +1,25 @@
+name: reseed-tools-linux-amd64
+key: ""
+signer: hankhill19580@gmail.com
+version: 0.3.12
+license: MIT
+date: ""
+author: hankhill19580@gmail.com
+website: http://idk.i2p/reseed-tools/
+updateURL: http://idk.i2p/reseed-tools/reseed-tools-linux-amd64.su3
+description: Reseed tools is a self-contained, easy-to-configure I2P reseed service which can be run on any OS.
+consoleLinkName: Reseed Tools
+consoleLinkURL: https://127.0.0.1:7671
+consoleIcon: ""
+consoleIconCode: content/images/reseed-icon.png
+minVersion: ""
+maxVersion: ""
+minJava: ""
+minJetty: ""
+maxJetty: ""
+disableStop: false
+dont-start-at-install: false
+restart-at-install: false
+only-update: false
+only-install: false
+signerDirectory: /home/idk/i2p-go-keys.bak/
