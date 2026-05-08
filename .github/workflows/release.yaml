@@ -32,14 +32,10 @@ jobs:
         run: |
           # Build for various platforms
           GOOS=linux GOARCH=amd64 make build
-          GOOS=linux GOARCH=386 make build
-          GOOS=linux GOARCH=arm make build
           GOOS=linux GOARCH=arm64 make build
           GOOS=openbsd GOARCH=amd64 make build
-          GOOS=freebsd GOARCH=386 make build
           GOOS=freebsd GOARCH=amd64 make build
           GOOS=windows GOARCH=amd64 make build
-          GOOS=windows GOARCH=386 make build
 
       - name: Build Debian packages
         run: |
@@ -47,22 +43,16 @@ jobs:
           sudo -u i2psvc mkdir -p /var/lib/i2p/i2p-config/reseed
           sudo mkdir -p /etc/systemd/system/reseed.service.d/
           sudo bash -c "GOOS=linux GOARCH=amd64 make checkinstall"
-          sudo bash -c "GOOS=linux GOARCH=386 make checkinstall"
-          sudo bash -c "GOOS=linux GOARCH=arm make checkinstall"
           sudo bash -c "GOOS=linux GOARCH=arm64 make checkinstall"
 
       #- name: Build plugins
         #run: |
           ## Build plugins for various platforms
           #GOOS=linux GOARCH=amd64 make su3s
-          #GOOS=linux GOARCH=386 make su3s
-          #GOOS=linux GOARCH=arm make su3s
           #GOOS=linux GOARCH=arm64 make su3s
           #GOOS=openbsd GOARCH=amd64 make su3s
-          #GOOS=freebsd GOARCH=386 make su3s
           #GOOS=freebsd GOARCH=amd64 make su3s
           #GOOS=windows GOARCH=amd64 make su3s
-          #GOOS=windows GOARCH=386 make su3s
 
       - name: Create Release
         id: create_release
