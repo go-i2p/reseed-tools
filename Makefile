@@ -1,5 +1,5 @@
 
-VERSION=$(shell /usr/bin/go run . version 2>/dev/null)
+VERSION=$(shell GOOS=linux GOARCH=amd64 /usr/bin/go run . version 2>/dev/null)
 APP=reseed-tools
 USER_GH=go-i2p
 SIGNER=hankhill19580@gmail.com
