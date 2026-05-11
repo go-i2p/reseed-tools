@@ -1,6 +1,6 @@
 2026-05-08
  * app.Version = 0.3.13
- * Fix CPU exhaustion bug arising from incorrect mutex handling. Reported by `sexy` on #saltr.
+ * Fix CPU exhaustion bug arising from incorrect mutex handling. Reported by likogan.dev/`sexy` on #saltr.
 
 2026-02-16
  * app.Version = 0.3.11
