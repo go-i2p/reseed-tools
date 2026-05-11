@@ -75,19 +75,22 @@ func NewServer(prefix string, trustProxy bool, samaddr string) *Server {
 
 	server := Server{Server: h, Reseeder: nil}
 
-	var err error
-	server.embeddedRouter, err = server.newEmbeddedSAMBridge()
-	if err != nil {
-		lgr.WithError(err).Warn("Failed to create embedded SAM bridge, will attempt external SAM connection")
-	}
-	err = server.embeddedRouter.Start(context.Background())
-	if err != nil {
-		lgr.WithError(err).Warn("Failed to start embedded SAM bridge, will attempt external SAM connection")
-	}
-	server.Garlic, err = onramp.NewGarlic("reseed", samaddr, onramp.OPT_WIDE)
-	if err != nil {
-		lgr.WithError(err).Warn("Failed to create Garlic instance for I2P. will try again without embedded SAM bridge")
-	}
+	/*
+		Disable this for now, I was working on it before the CPU exhaustion fixes
+			var err error
+			server.embeddedRouter, err = server.newEmbeddedSAMBridge()
+			if err != nil {
+				lgr.WithError(err).Warn("Failed to create embedded SAM bridge, will attempt external SAM connection")
+			}
+			err = server.embeddedRouter.Start(context.Background())
+			if err != nil {
+				lgr.WithError(err).Warn("Failed to start embedded SAM bridge, will attempt external SAM connection")
+			}
+			server.Garlic, err = onramp.NewGarlic("reseed", samaddr, onramp.OPT_WIDE)
+			if err != nil {
+				lgr.WithError(err).Warn("Failed to create Garlic instance for I2P. will try again without embedded SAM bridge")
+			}
+	*/
 
 	throttleSu3Handler := throttled.RateLimit(throttled.PerHour(4), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
 	throttleWebHandler := throttled.RateLimit(throttled.PerHour(30), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
