@@ -214,6 +214,11 @@ func NewReseedCommand() *cli.Command {
 				Value: 40,
 				Usage: "Maxiumum number of web-visits per-IP address, per-hour",
 			},
+			&cli.IntFlag{
+				Name:  "globalratelimit",
+				Value: 1000,
+				Usage: "Maximum number of total requests per-hour, across all IP addresses. Set to 0 to disable.",
+			},
 		},
 	}
 }

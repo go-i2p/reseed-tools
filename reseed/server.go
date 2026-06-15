@@ -51,14 +51,20 @@ type Server struct {
 	Onion         *onramp.Onion
 
 	// Rate limiting configuration for request throttling
-	RequestRateLimit      int
-	requestRateStore      throttled.Store
-	requestRateQuota      throttled.RateQuota
-	requestRateLimiter    throttled.RateLimiter
+	RequestRateLimit   int
+	requestRateStore   throttled.Store
+	requestRateQuota   throttled.RateQuota
+	requestRateLimiter throttled.RateLimiter
+
 	WebRateLimit          int
 	webRequestRateStore   throttled.Store
 	webRequestRateQuota   throttled.RateQuota
 	webRequestRateLimiter throttled.RateLimiter
+
+	GlobalRateLimit   int
+	globalRateStore   throttled.Store
+	globalRateQuota   throttled.RateQuota
+	globalRateLimiter throttled.RateLimiter
 	// Thread-safe tracking of acceptable client connection timing
 	acceptables      map[string]time.Time
 	acceptablesMutex sync.RWMutex
@@ -68,7 +74,7 @@ type Server struct {
 // It sets up TLS 1.3-only connections, proper cipher suites, and middleware chain for
 // request processing. The prefix parameter customizes URL paths and trustProxy enables
 // reverse proxy support for deployment behind load balancers or CDNs.
-func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit, webRateLimit int) *Server {
+func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit, webRateLimit, globalRateLimit int) *Server {
 	config := &tls.Config{
 		MinVersion:               tls.VersionTLS13,
 		PreferServerCipherSuites: true,
@@ -80,7 +86,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	h := &http.Server{TLSConfig: config}
 
-	server := Server{Server: h, Reseeder: nil, RequestRateLimit: requestRateLimit, WebRateLimit: webRateLimit}
+	server := Server{Server: h, Reseeder: nil, RequestRateLimit: requestRateLimit, WebRateLimit: webRateLimit, GlobalRateLimit: globalRateLimit}
 
 	/*
 		Disable this for now, I was working on it before the CPU exhaustion fixes
@@ -104,8 +110,8 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 		log.Fatal(err)
 	}
 	server.requestRateQuota = throttled.RateQuota{
-		MaxRate:  throttled.PerMin(20),
-		MaxBurst: requestRateLimit,
+		MaxRate:  throttled.PerHour(server.RequestRateLimit),
+		MaxBurst: server.RequestRateLimit,
 	}
 	server.requestRateLimiter, err = throttled.NewGCRARateLimiter(server.requestRateStore, server.requestRateQuota)
 	if err != nil {
@@ -113,7 +119,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	throttleSu3Handler := throttled.HTTPRateLimiter{
 		RateLimiter: server.requestRateLimiter,
-		VaryBy:      &throttled.VaryBy{},
+		VaryBy:      &throttled.VaryBy{RemoteAddr: true},
 	}
 	server.webRequestRateStore, err = memstore.New(65536)
 	if err != nil {
@@ -121,7 +127,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	server.webRequestRateQuota = throttled.RateQuota{
 		MaxRate:  throttled.PerHour(server.WebRateLimit),
-		MaxBurst: webRateLimit,
+		MaxBurst: server.WebRateLimit,
 	}
 	server.webRequestRateLimiter, err = throttled.NewGCRARateLimiter(server.webRequestRateStore, server.webRequestRateQuota)
 	if err != nil {
@@ -129,7 +135,24 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	throttleWebHandler := throttled.HTTPRateLimiter{
 		RateLimiter: server.webRequestRateLimiter,
-		VaryBy:      &throttled.VaryBy{},
+		VaryBy:      &throttled.VaryBy{RemoteAddr: true},
+	}
+
+	server.globalRateStore, err = memstore.New(65536)
+	if err != nil {
+		log.Fatal(err)
+	}
+	server.globalRateQuota = throttled.RateQuota{
+		MaxRate:  throttled.PerHour(server.GlobalRateLimit),
+		MaxBurst: server.GlobalRateLimit,
+	}
+	server.globalRateLimiter, err = throttled.NewGCRARateLimiter(server.globalRateStore, server.globalRateQuota)
+	if err != nil {
+		log.Fatal(err)
+	}
+	throttledGlobalHandler := throttled.HTTPRateLimiter{
+		RateLimiter: server.globalRateLimiter,
+		VaryBy:      &throttled.VaryBy{Method: true},
 	}
 	middlewareChain := alice.New()
 	if trustProxy {
@@ -144,8 +167,8 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	})
 
 	mux := http.NewServeMux()
-	mux.Handle("/", middlewareChain.Append(disableKeepAliveMiddleware, loggingMiddleware, throttleWebHandler.RateLimit, server.browsingMiddleware).Then(errorHandler))
-	mux.Handle(prefix+"/i2pseeds.su3", middlewareChain.Append(disableKeepAliveMiddleware, loggingMiddleware, verifyMiddleware, throttleSu3Handler.RateLimit).Then(http.HandlerFunc(server.reseedHandler)))
+	mux.Handle("/", middlewareChain.Append(disableKeepAliveMiddleware, loggingMiddleware, throttledGlobalHandler.RateLimit, throttleWebHandler.RateLimit, server.browsingMiddleware).Then(errorHandler))
+	mux.Handle(prefix+"/i2pseeds.su3", middlewareChain.Append(disableKeepAliveMiddleware, loggingMiddleware, verifyMiddleware, throttledGlobalHandler.RateLimit, throttleSu3Handler.RateLimit).Then(http.HandlerFunc(server.reseedHandler)))
 	server.Handler = mux
 
 	return &server
