@@ -111,7 +111,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	server.requestRateQuota = throttled.RateQuota{
 		MaxRate:  throttled.PerHour(server.RequestRateLimit),
-		MaxBurst: server.RequestRateLimit,
+		MaxBurst: calculateBurst(server.RequestRateLimit, 25, 1), // Burst is 25% of rate or at least 1
 	}
 	server.requestRateLimiter, err = throttled.NewGCRARateLimiter(server.requestRateStore, server.requestRateQuota)
 	if err != nil {
@@ -127,7 +127,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	server.webRequestRateQuota = throttled.RateQuota{
 		MaxRate:  throttled.PerHour(server.WebRateLimit),
-		MaxBurst: server.WebRateLimit,
+		MaxBurst: calculateBurst(server.WebRateLimit, 13, 5), // Burst is 13% of rate or at least 5
 	}
 	server.webRequestRateLimiter, err = throttled.NewGCRARateLimiter(server.webRequestRateStore, server.webRequestRateQuota)
 	if err != nil {
@@ -144,7 +144,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	server.globalRateQuota = throttled.RateQuota{
 		MaxRate:  throttled.PerHour(server.GlobalRateLimit),
-		MaxBurst: server.GlobalRateLimit,
+		MaxBurst: calculateBurst(server.GlobalRateLimit, 5, 50), // Burst is 5% of rate or at least 50
 	}
 	server.globalRateLimiter, err = throttled.NewGCRARateLimiter(server.globalRateStore, server.globalRateQuota)
 	if err != nil {
@@ -172,6 +172,14 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	server.Handler = mux
 
 	return &server
+}
+
+func calculateBurst(rate, divisor, minimum int) int {
+	calculatedBurst := rate / divisor
+	if calculatedBurst < minimum {
+		return minimum
+	}
+	return calculatedBurst
 }
 
 // SecureRandomAlphaString generates a cryptographically secure random alphabetic string.
