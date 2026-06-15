@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -21,7 +22,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/justinas/alice"
 	throttled "github.com/throttled/throttled/v2"
-	"github.com/throttled/throttled/v2/store"
+	"github.com/throttled/throttled/v2/store/memstore"
 )
 
 // Server represents a complete reseed server instance with multi-protocol support.
@@ -50,8 +51,14 @@ type Server struct {
 	Onion         *onramp.Onion
 
 	// Rate limiting configuration for request throttling
-	RequestRateLimit int
-	WebRateLimit     int
+	RequestRateLimit      int
+	requestRateStore      throttled.Store
+	requestRateQuota      throttled.RateQuota
+	requestRateLimiter    throttled.RateLimiter
+	WebRateLimit          int
+	webRequestRateStore   throttled.Store
+	webRequestRateQuota   throttled.RateQuota
+	webRequestRateLimiter throttled.RateLimiter
 	// Thread-safe tracking of acceptable client connection timing
 	acceptables      map[string]time.Time
 	acceptablesMutex sync.RWMutex
@@ -91,10 +98,39 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 				lgr.WithError(err).Warn("Failed to create Garlic instance for I2P. will try again without embedded SAM bridge")
 			}
 	*/
-
-	throttleSu3Handler := throttled.RateLimit(throttled.PerHour(server.RequestRateLimit), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
-	throttleWebHandler := throttled.RateLimit(throttled.PerHour(server.WebRateLimit), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
-
+	var err error
+	server.requestRateStore, err = memstore.New(65536)
+	if err != nil {
+		log.Fatal(err)
+	}
+	server.requestRateQuota = throttled.RateQuota{
+		MaxRate:  throttled.PerMin(20),
+		MaxBurst: requestRateLimit,
+	}
+	server.requestRateLimiter, err = throttled.NewGCRARateLimiter(server.requestRateStore, server.requestRateQuota)
+	if err != nil {
+		log.Fatal(err)
+	}
+	throttleSu3Handler := throttled.HTTPRateLimiter{
+		RateLimiter: server.requestRateLimiter,
+		VaryBy:      &throttled.VaryBy{},
+	}
+	server.webRequestRateStore, err = memstore.New(65536)
+	if err != nil {
+		log.Fatal(err)
+	}
+	server.webRequestRateQuota = throttled.RateQuota{
+		MaxRate:  throttled.PerHour(server.WebRateLimit),
+		MaxBurst: webRateLimit,
+	}
+	server.webRequestRateLimiter, err = throttled.NewGCRARateLimiter(server.webRequestRateStore, server.webRequestRateQuota)
+	if err != nil {
+		log.Fatal(err)
+	}
+	throttleWebHandler := throttled.HTTPRateLimiter{
+		RateLimiter: server.webRequestRateLimiter,
+		VaryBy:      &throttled.VaryBy{},
+	}
 	middlewareChain := alice.New()
 	if trustProxy {
 		middlewareChain = middlewareChain.Append(proxiedMiddleware)
