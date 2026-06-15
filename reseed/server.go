@@ -61,7 +61,7 @@ type Server struct {
 // It sets up TLS 1.3-only connections, proper cipher suites, and middleware chain for
 // request processing. The prefix parameter customizes URL paths and trustProxy enables
 // reverse proxy support for deployment behind load balancers or CDNs.
-func NewServer(prefix string, trustProxy bool, samaddr string) *Server {
+func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit, webRateLimit int) *Server {
 	config := &tls.Config{
 		MinVersion:               tls.VersionTLS13,
 		PreferServerCipherSuites: true,
@@ -73,7 +73,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string) *Server {
 	}
 	h := &http.Server{TLSConfig: config}
 
-	server := Server{Server: h, Reseeder: nil}
+	server := Server{Server: h, Reseeder: nil, RequestRateLimit: requestRateLimit, WebRateLimit: webRateLimit}
 
 	/*
 		Disable this for now, I was working on it before the CPU exhaustion fixes
@@ -92,8 +92,8 @@ func NewServer(prefix string, trustProxy bool, samaddr string) *Server {
 			}
 	*/
 
-	throttleSu3Handler := throttled.RateLimit(throttled.PerHour(4), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
-	throttleWebHandler := throttled.RateLimit(throttled.PerHour(30), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
+	throttleSu3Handler := throttled.RateLimit(throttled.PerHour(server.RequestRateLimit), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
+	throttleWebHandler := throttled.RateLimit(throttled.PerHour(server.WebRateLimit), &throttled.VaryBy{RemoteAddr: true}, store.NewMemStore(200000))
 
 	middlewareChain := alice.New()
 	if trustProxy {

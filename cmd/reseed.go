@@ -655,10 +655,8 @@ func initializeReseeder(c *cli.Context, netdbDir, signerID string, privKey *rsa.
 
 // Context-aware server functions that return errors instead of calling Fatal
 func reseedHTTPSWithContext(ctx context.Context, c *cli.Context, tlsCert, tlsKey string, reseeder *reseed.ReseederImpl) error {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"))
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"))
 	server.Reseeder = reseeder
-	server.RequestRateLimit = c.Int("ratelimit")
-	server.WebRateLimit = c.Int("ratelimitweb")
 	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
 
 	// load a blacklist
@@ -704,9 +702,7 @@ func reseedHTTPSWithContext(ctx context.Context, c *cli.Context, tlsCert, tlsKey
 }
 
 func reseedHTTPWithContext(ctx context.Context, c *cli.Context, reseeder *reseed.ReseederImpl) error {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"))
-	server.RequestRateLimit = c.Int("ratelimit")
-	server.WebRateLimit = c.Int("ratelimitweb")
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"))
 	server.Reseeder = reseeder
 	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
 
@@ -754,7 +750,7 @@ func reseedHTTPWithContext(ctx context.Context, c *cli.Context, reseeder *reseed
 
 // setupOnionServer configures a new reseed server instance with blacklist support.
 func setupOnionServer(c *cli.Context, reseeder *reseed.ReseederImpl) *reseed.Server {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"))
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"))
 	server.Reseeder = reseeder
 	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
 
@@ -893,9 +889,7 @@ func reseedI2PWithContext(ctx context.Context, c *cli.Context, i2pTlsCert, i2pTl
 // configureI2PReseederServer creates and configures a new reseed server for I2P networking.
 // It sets up rate limiting, network address, and basic server configuration.
 func configureI2PReseederServer(c *cli.Context, reseeder *reseed.ReseederImpl) *reseed.Server {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"))
-	server.RequestRateLimit = c.Int("ratelimit")
-	server.WebRateLimit = c.Int("ratelimitweb")
+	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"))
 	server.Reseeder = reseeder
 	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
 	return server
