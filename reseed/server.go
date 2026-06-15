@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -144,7 +145,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	server.globalRateQuota = throttled.RateQuota{
 		MaxRate:  throttled.PerHour(server.GlobalRateLimit),
-		MaxBurst: calculateBurst(server.GlobalRateLimit, 5, 50), // Burst is 5% of rate or at least 50
+		MaxBurst: calculateBurst(server.GlobalRateLimit, 5, server.WebRateLimit+server.RequestRateLimit), // Burst is 5% of rate or at least server.WebRateLimit + server.RequestRateLimit
 	}
 	server.globalRateLimiter, err = throttled.NewGCRARateLimiter(server.globalRateStore, server.globalRateQuota)
 	if err != nil {
@@ -174,8 +175,24 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	return &server
 }
 
-func calculateBurst(rate, divisor, minimum int) int {
-	calculatedBurst := rate / divisor
+func calculateBurst(rate, percent, minimum int) int {
+	//ensure minimum is at least 1 to avoid zero burst which would block all requests
+	if minimum < 1 {
+		minimum = 1
+	}
+	if percent <= 0 {
+		return minimum
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	// convert percent to a decimal
+	decimal := float64(percent) / 100.0
+	// calculate burst based on rate and percentage
+	calculatedBurstFloat := float64(rate) * decimal
+	// ensure burst is a whole number, no fractions or decimals
+	calculatedBurst := int(math.Ceil(calculatedBurstFloat))
+	// ensure burst is at least the minimum value
 	if calculatedBurst < minimum {
 		return minimum
 	}

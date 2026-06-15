@@ -30,7 +30,7 @@ func TestRebuildConcurrency(t *testing.T) {
 		if _, err := rand.Read(dummyData); err != nil {
 			t.Fatalf("Failed to generate test data: %v", err)
 		}
-		if err := ioutil.WriteFile(filename, dummyData, 0644); err != nil {
+		if err := ioutil.WriteFile(filename, dummyData, 0o644); err != nil {
 			t.Fatalf("Failed to write test file: %v", err)
 		}
 	}
@@ -171,7 +171,7 @@ func BenchmarkRebuildWithMutex(b *testing.B) {
 		filename := filepath.Join(tmpDir, "routerInfo-bench"+string(rune(i))+".dat")
 		dummyData := make([]byte, 256)
 		rand.Read(dummyData)
-		ioutil.WriteFile(filename, dummyData, 0644)
+		ioutil.WriteFile(filename, dummyData, 0o644)
 	}
 
 	netdb := NewLocalNetDb(tmpDir, 24*time.Hour)
