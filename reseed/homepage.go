@@ -209,6 +209,11 @@ func (srv *Server) handleDynamicRequest(w http.ResponseWriter, r *http.Request, 
 func (srv *Server) handleImageRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	imagePath := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/"), "images")
+	// Validate path doesn't escape content directory (prevent path traversal)
+	if strings.Contains(imagePath, "..") {
+		http.Error(w, "403 Forbidden", http.StatusForbidden)
+		return
+	}
 	handleAFile(w, "images", imagePath)
 }
 

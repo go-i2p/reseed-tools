@@ -30,10 +30,7 @@ import (
 // and download router information from the local netDb directory for network synchronization.
 // Can be used to combine the local netDb with the netDb of a remote I2P router.
 func NewShareCommand() *cli.Command {
-	ndb, err := getmeanetdb.WhereIstheNetDB()
-	if err != nil {
-		lgr.WithError(err).Fatal("Fatal error in share")
-	}
+	ndb, _ := getmeanetdb.WhereIstheNetDB()
 	return &cli.Command{
 		Name:   "share",
 		Usage:  "Start a netDb sharing server",

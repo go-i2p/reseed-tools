@@ -208,19 +208,17 @@ func calculateBurst(rate, percent, minimum int) int {
 // other security-sensitive contexts. Uses crypto/rand for entropy source.
 func SecureRandomAlphaString() string {
 	// Fixed 16-character length for consistent token generation
-	length := 16
+	const length = 16
 	result := make([]byte, length)
-	// Buffer size calculation for efficient random byte usage
-	bufferSize := int(float64(length) * 1.3)
-	for i, j, randomBytes := 0, 0, []byte{}; i < length; j++ {
-		// Refresh random bytes buffer when needed for efficiency
-		if j%bufferSize == 0 {
-			randomBytes = SecureRandomBytes(bufferSize)
-		}
-		// Filter random bytes to only include valid letter indices
-		if idx := int(randomBytes[j%bufferSize] & letterIdxMask); idx < len(letterBytes) {
-			result[i] = letterBytes[idx]
-			i++
+	for i := 0; i < length; {
+		// Generate fresh random bytes each iteration to avoid buffer reuse bias
+		randomBytes := SecureRandomBytes(length)
+		for j := 0; j < len(randomBytes) && i < length; j++ {
+			// Rejection sampling: only accept bytes that map to valid letter indices
+			if idx := int(randomBytes[j] & letterIdxMask); idx < len(letterBytes) {
+				result[i] = letterBytes[idx]
+				i++
+			}
 		}
 	}
 	return string(result)

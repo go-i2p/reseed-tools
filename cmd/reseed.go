@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rsa"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -70,10 +72,7 @@ func providedReseeds(c *cli.Context) []string {
 // The server supports multiple protocols (HTTP, HTTPS, I2P, Tor) and provides signed SU3 files
 // containing router information for network bootstrapping.
 func NewReseedCommand() *cli.Command {
-	ndb, err := getmeanetdb.WhereIstheNetDB()
-	if err != nil {
-		lgr.WithError(err).Fatal("Failed to locate NetDB")
-	}
+	ndb, _ := getmeanetdb.WhereIstheNetDB()
 	return &cli.Command{
 		Name:   "reseed",
 		Usage:  "Start a reseed server",
@@ -1146,12 +1145,19 @@ func createGarlicHTTPClient(samaddr, password string) (*http.Client, *onramp.Gar
 }
 
 // downloadAndSaveNetDB downloads the netDb archive from the remote URL and saves it locally.
+// Authentication uses HMAC-SHA256 with a nonce timestamp matching the sharer server protocol.
 func downloadAndSaveNetDB(client *http.Client, url *url.URL, password string) error {
 	httpRequest := http.Request{
 		URL:    url,
 		Header: http.Header{},
 	}
-	httpRequest.Header.Add(http.CanonicalHeaderKey("reseed-password"), password)
+	// Compute HMAC-SHA256 authentication matching the sharer server protocol
+	nonce := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(password))
+	mac.Write([]byte(nonce))
+	sig := fmt.Sprintf("%x", mac.Sum(nil))
+	httpRequest.Header.Add(http.CanonicalHeaderKey("X-HMAC-SHA256"), sig)
+	httpRequest.Header.Add(http.CanonicalHeaderKey("X-Nonce-Timestamp"), nonce)
 	httpRequest.Header.Add(http.CanonicalHeaderKey("x-user-agent"), reseed.I2pUserAgent)
 
 	resp, err := client.Do(&httpRequest)

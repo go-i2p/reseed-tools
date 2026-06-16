@@ -1,7 +1,6 @@
 package reseed
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -74,29 +73,31 @@ type blacklistListener struct {
 }
 
 func (ln blacklistListener) Accept() (net.Conn, error) {
-	// Accept incoming TCP connection for blacklist evaluation
-	tc, err := ln.AcceptTCP()
-	if err != nil {
-		lgr.WithError(err).Error("Failed to accept TCP connection")
-		return nil, err
-	}
+	for {
+		// Accept incoming TCP connection for blacklist evaluation
+		tc, err := ln.AcceptTCP()
+		if err != nil {
+			lgr.WithError(err).Error("Failed to accept TCP connection")
+			return nil, err
+		}
 
-	// Extract IP address from remote connection for blacklist checking
-	ip, _, err := net.SplitHostPort(tc.RemoteAddr().String())
-	if err != nil {
-		lgr.WithError(err).WithField("remote_addr", tc.RemoteAddr().String()).Error("Failed to parse remote address")
-		tc.Close()
-		return nil, err
-	}
+		// Extract IP address from remote connection for blacklist checking
+		ip, _, err := net.SplitHostPort(tc.RemoteAddr().String())
+		if err != nil {
+			lgr.WithError(err).WithField("remote_addr", tc.RemoteAddr().String()).Error("Failed to parse remote address")
+			tc.Close()
+			continue
+		}
 
-	// Reject connection immediately if IP is blacklisted for security
-	if ln.blacklist.isBlocked(ip) {
-		lgr.WithField("blocked_ip", ip).Warn("Connection rejected: IP address is blacklisted")
-		tc.Close()
-		return nil, errors.New("connection rejected: IP address is blacklisted")
-	}
+		// Reject connection immediately if IP is blacklisted for security
+		if ln.blacklist.isBlocked(ip) {
+			lgr.WithField("blocked_ip", ip).Warn("Connection rejected: IP address is blacklisted")
+			tc.Close()
+			continue
+		}
 
-	return tc, err
+		return tc, nil
+	}
 }
 
 func newBlacklistListener(ln net.Listener, bl *Blacklist) (blacklistListener, error) {
