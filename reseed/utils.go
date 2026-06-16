@@ -2,7 +2,9 @@ package reseed
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"math/big"
@@ -43,8 +45,13 @@ func NewTLSCertificateAltNames(priv *ecdsa.PrivateKey, hosts ...string) ([]byte,
 		return nil, err
 	}
 
+	// Compute SubjectKeyId from public key (required for CRL signing)
+	pubKeyBytes := elliptic.Marshal(priv.PublicKey.Curve, priv.PublicKey.X, priv.PublicKey.Y)
+	subjectKeyId := sha256.Sum256(pubKeyBytes)
+
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
+		SubjectKeyId: subjectKeyId[:],
 		Subject: pkix.Name{
 			Organization:       []string{"I2P Anonymous Network"},
 			OrganizationalUnit: []string{"I2P"},
