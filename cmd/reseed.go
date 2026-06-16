@@ -400,10 +400,22 @@ func setupRemoteNetDBSharing(c *cli.Context) error {
 				break
 			}
 		}
-		go getSupplementalNetDb(c.String("share-peer"), c.String("share-password"), c.String("netdb"), c.String("samaddr"))
+		// Store config for later goroutine startup in startConfiguredServers
+		setupRemoteNetDBConfig.remote = c.String("share-peer")
+		setupRemoteNetDBConfig.password = c.String("share-password")
+		setupRemoteNetDBConfig.path = c.String("netdb")
+		setupRemoteNetDBConfig.samaddr = c.String("samaddr")
 	}
 	return nil
 }
+
+// remoteNetDBConfig stores configuration for the remote NetDB update goroutine.
+var setupRemoteNetDBConfig = struct {
+	remote   string
+	password string
+	path     string
+	samaddr  string
+}{}
 
 // tlsConfiguration holds TLS certificate configuration for different protocols.
 type tlsConfiguration struct {
@@ -1057,6 +1069,11 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 		}
 	}()
 
+	// Start remote NetDB update loop if configured
+	if setupRemoteNetDBConfig.remote != "" {
+		go getSupplementalNetDb(ctx, setupRemoteNetDBConfig.remote, setupRemoteNetDBConfig.password, setupRemoteNetDBConfig.path, setupRemoteNetDBConfig.samaddr)
+	}
+
 	startOnionServer(ctx, c, tlsConfig, reseeder, wg, errChan)
 	startI2PServer(ctx, c, tlsConfig, i2pkey, reseeder, wg, errChan)
 	startHTTPServer(ctx, c, tlsConfig, reseeder, wg, errChan)
@@ -1064,15 +1081,30 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 	waitForServerCompletion(wg, errChan)
 }
 
-func getSupplementalNetDb(remote, password, path, samaddr string) {
+func getSupplementalNetDb(ctx context.Context, remote, password, path, samaddr string) {
 	log.Println("Remote NetDB Update Loop")
 	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Remote NetDB update loop shutting down")
+			return
+		default:
+		}
+
 		if err := downloadRemoteNetDB(remote, password, path, samaddr); err != nil {
 			log.Println("Error downloading remote netDb", err)
-			time.Sleep(time.Second * 30)
+			select {
+			case <-time.After(time.Second * 30):
+			case <-ctx.Done():
+				return
+			}
 		} else {
 			log.Println("Success downloading remote netDb", err)
-			time.Sleep(time.Minute * 30)
+			select {
+			case <-time.After(time.Minute * 30):
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }

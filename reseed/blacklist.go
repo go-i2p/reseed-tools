@@ -85,7 +85,7 @@ func (ln blacklistListener) Accept() (net.Conn, error) {
 	if err != nil {
 		lgr.WithError(err).WithField("remote_addr", tc.RemoteAddr().String()).Error("Failed to parse remote address")
 		tc.Close()
-		return tc, err
+		return nil, err
 	}
 
 	// Reject connection immediately if IP is blacklisted for security
