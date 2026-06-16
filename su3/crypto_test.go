@@ -65,7 +65,7 @@ func TestNewSigningCertificate_ValidInput(t *testing.T) {
 	}
 
 	// Verify key usage
-	expectedKeyUsage := x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign
+	expectedKeyUsage := x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign
 	if cert.KeyUsage != expectedKeyUsage {
 		t.Errorf("Expected KeyUsage %d, got %d", expectedKeyUsage, cert.KeyUsage)
 	}

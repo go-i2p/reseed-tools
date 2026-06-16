@@ -128,8 +128,8 @@ func TestNewTLSCertificate(t *testing.T) {
 					t.Error("Certificate should not be marked as CA")
 				}
 
-				// Check key usage (should be for server auth, not cert signing)
-				expectedKeyUsage := x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
+				// Check key usage (should be for server auth and CRL signing)
+				expectedKeyUsage := x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCRLSign
 				if cert.KeyUsage != expectedKeyUsage {
 					t.Errorf("Certificate KeyUsage = %v, want %v", cert.KeyUsage, expectedKeyUsage)
 				}

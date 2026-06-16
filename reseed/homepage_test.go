@@ -80,8 +80,8 @@ func TestHandleAFile_FileNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	handleAFile(w, "", "nonexistent.css")
 	body := w.Body.String()
-	if !strings.Contains(body, "Oops!") {
-		t.Errorf("expected error message, got: %q", body)
+	if !strings.Contains(body, "404") {
+		t.Errorf("expected 404 error, got: %q", body)
 	}
 }
 
@@ -279,8 +279,8 @@ func TestHandleALocalizedFile_MissingDirectory(t *testing.T) {
 	w := httptest.NewRecorder()
 	handleALocalizedFile(w, "xx")
 	body := w.Body.String()
-	if !strings.Contains(body, "Oops!") {
-		t.Errorf("expected error message for missing directory, got: %q", body)
+	if !strings.Contains(body, "500") {
+		t.Errorf("expected 500 error for missing directory, got: %q", body)
 	}
 }
 
@@ -315,8 +315,8 @@ func TestHandleALocalizedFile_ReturnsOnReadError(t *testing.T) {
 	w := httptest.NewRecorder()
 	handleALocalizedFile(w, "ko")
 	body := w.Body.String()
-	if !strings.Contains(body, "Oops!") {
-		t.Errorf("expected error for unreadable file, got: %q", body)
+	if !strings.Contains(body, "500") {
+		t.Errorf("expected 500 error for unreadable file, got: %q", body)
 	}
 }
 
