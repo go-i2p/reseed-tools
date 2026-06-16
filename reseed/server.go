@@ -377,7 +377,9 @@ func (srv *Server) reseedHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(int64(len(su3Bytes)), 10))
 
-	io.Copy(w, bytes.NewReader(su3Bytes))
+	if _, err := io.Copy(w, bytes.NewReader(su3Bytes)); err != nil {
+		lgr.WithError(err).WithField("peer", peer).Debug("Error copying su3 response to client")
+	}
 }
 
 func disableKeepAliveMiddleware(next http.Handler) http.Handler {

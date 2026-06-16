@@ -123,13 +123,13 @@ func TestNewTLSCertificate(t *testing.T) {
 					t.Errorf("Certificate CommonName = %q, want %q", cert.Subject.CommonName, tt.host)
 				}
 
-				// Check if it's a valid CA certificate
-				if !cert.IsCA {
-					t.Error("Certificate should be marked as CA")
+				// Check if it's NOT a CA certificate (TLS server certs should not have CA capabilities)
+				if cert.IsCA {
+					t.Error("Certificate should not be marked as CA")
 				}
 
-				// Check key usage
-				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
+				// Check key usage (should be for server auth, not cert signing)
+				expectedKeyUsage := x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
 				if cert.KeyUsage != expectedKeyUsage {
 					t.Errorf("Certificate KeyUsage = %v, want %v", cert.KeyUsage, expectedKeyUsage)
 				}
