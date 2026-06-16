@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
@@ -439,16 +438,21 @@ func generateAndSaveSigningCRL(signerID string, signerKey *rsa.PrivateKey, signe
 	// Generate empty CRL with no revoked certificates
 	// (unless a revocation feature is implemented, the CRL should list no revoked certs)
 	now := time.Now()
-	revokedCerts := []pkix.RevokedCertificate{}
 
-	// Generate CRL bytes
-	crlBytes, err := crlcert.CreateCRL(rand.Reader, signerKey, revokedCerts, now, now)
+	// Generate CRL bytes using modern RevocationList API
+	crlTemplate := &x509.RevocationList{
+		RevokedCertificateEntries: []x509.RevocationListEntry{},
+		Number:                    crlcert.SerialNumber,
+		ThisUpdate:                now,
+		NextUpdate:                now,
+	}
+	crlBytes, err := x509.CreateRevocationList(rand.Reader, crlTemplate, crlcert, signerKey)
 	if err != nil {
 		return fmt.Errorf("error creating CRL: %s", err)
 	}
 
 	// Validate CRL by parsing it
-	if _, err := x509.ParseDERCRL(crlBytes); err != nil {
+	if _, err := x509.ParseRevocationList(crlBytes); err != nil {
 		return fmt.Errorf("error reparsing CRL: %s", err)
 	}
 
@@ -573,21 +577,27 @@ func generateAndSaveTLSCRL(host string, priv *ecdsa.PrivateKey, tlsCert []byte) 
 
 	// Create revoked certificate entry for testing purposes
 	now := time.Now()
-	revokedCerts := []pkix.RevokedCertificate{
+	revokedEntries := []x509.RevocationListEntry{
 		{
 			SerialNumber:   crlcert.SerialNumber,
 			RevocationTime: now,
 		},
 	}
 
-	// Generate CRL bytes
-	crlBytes, err := crlcert.CreateCRL(rand.Reader, priv, revokedCerts, now, now)
+	// Generate CRL bytes using modern RevocationList API
+	crlTemplate := &x509.RevocationList{
+		RevokedCertificateEntries: revokedEntries,
+		Number:                    crlcert.SerialNumber,
+		ThisUpdate:                now,
+		NextUpdate:                now,
+	}
+	crlBytes, err := x509.CreateRevocationList(rand.Reader, crlTemplate, crlcert, priv)
 	if err != nil {
 		return fmt.Errorf("error creating CRL: %s", err)
 	}
 
 	// Validate CRL by parsing it
-	if _, err := x509.ParseDERCRL(crlBytes); err != nil {
+	if _, err := x509.ParseRevocationList(crlBytes); err != nil {
 		return fmt.Errorf("error reparsing CRL: %s", err)
 	}
 

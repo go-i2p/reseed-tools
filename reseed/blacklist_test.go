@@ -313,32 +313,39 @@ func TestBlacklistListener_Accept_BlockedConnection(t *testing.T) {
 		t.Fatalf("Failed to create blacklist listener: %v", err)
 	}
 
-	// Create a connection in a goroutine
+	// Create a connection from a blacklisted IP in a goroutine
+	// The server should close it immediately
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		conn, err := net.Dial("tcp", listener.Addr().String())
 		if err == nil {
-			// Connection might be closed immediately, but that's expected
+			// Wait a bit and check if server closed the connection
+			buf := make([]byte, 1)
+			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+			_, readErr := conn.Read(buf)
+			if readErr == nil {
+				t.Error("Expected connection to be closed by server")
+			}
 			conn.Close()
 		}
 	}()
 
-	conn, err := blListener.Accept()
-	// For blocked connections, Accept should return an error
-	if err == nil {
-		t.Error("Accept() should return an error for blocked connections")
+	// Accept should block since all connections are blacklisted.
+	// Use a timeout to avoid hanging the test forever.
+	done := make(chan struct{})
+	go func() {
+		conn, _ := blListener.Accept()
 		if conn != nil {
 			conn.Close()
 		}
-	}
+		close(done)
+	}()
 
-	if conn != nil {
-		t.Error("Accept() should return nil connection for blocked IPs")
-	}
-
-	// Check that the error message is appropriate
-	if err != nil && !strings.Contains(err.Error(), "blacklisted") {
-		t.Errorf("Expected error message to contain 'blacklisted', got: %v", err)
+	select {
+	case <-done:
+		t.Error("Accept() should not return for blocked connections")
+	case <-time.After(1 * time.Second):
+		// Expected: Accept blocks because all incoming connections are blacklisted
 	}
 }
 
@@ -369,20 +376,22 @@ func TestBlacklistListener_Accept_ErrorBehavior(t *testing.T) {
 		}
 	}()
 
-	conn, err := blListener.Accept()
+	// Accept should block because the only connection is from a blacklisted IP.
+	// The blacklisted connection should be silently closed.
+	done := make(chan struct{})
+	go func() {
+		conn, _ := blListener.Accept()
+		if conn != nil {
+			conn.Close()
+		}
+		close(done)
+	}()
 
-	// Verify the error behavior
-	if err == nil {
-		t.Fatal("Expected error for blacklisted IP, got nil")
-	}
-
-	if conn != nil {
-		t.Error("Expected nil connection for blacklisted IP, got non-nil")
-	}
-
-	expectedErrMsg := "connection rejected: IP address is blacklisted"
-	if err.Error() != expectedErrMsg {
-		t.Errorf("Expected error message '%s', got '%s'", expectedErrMsg, err.Error())
+	select {
+	case <-done:
+		t.Error("Accept() should block when only blacklisted connections are available")
+	case <-time.After(1 * time.Second):
+		// Expected: Accept blocks, blacklisted connection was silently dropped
 	}
 }
 

@@ -341,21 +341,6 @@ func (srv *Server) CheckAcceptable(val string) bool {
 	return false
 }
 
-// checkAcceptableUnsafe performs acceptable checking without acquiring the mutex.
-// This should only be called when the mutex is already held.
-func (srv *Server) checkAcceptableUnsafe(val string) bool {
-	if timeout, ok := srv.acceptables[val]; ok {
-		checktime := time.Since(timeout)
-		if checktime > (4 * time.Minute) {
-			delete(srv.acceptables, val)
-			return false
-		}
-		// Don't delete here since we're just cleaning up expired entries
-		return true
-	}
-	return false
-}
-
 func (srv *Server) reseedHandler(w http.ResponseWriter, r *http.Request) {
 	var peer Peer
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
