@@ -2,6 +2,7 @@ package reseed
 
 import (
 	"embed"
+	"html"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -144,10 +145,15 @@ func (srv *Server) determineClientLanguage(r *http.Request) string {
 	lang, _ := r.Cookie("lang")
 	accept := r.Header.Get("Accept-Language")
 
-	lgr.WithField("lang", lang).WithField("accept", accept).Debug("Processing language preferences")
+	var langStr string
+	if lang != nil {
+		langStr = lang.String()
+	}
+
+	lgr.WithField("lang", langStr).WithField("accept", accept).Debug("Processing language preferences")
 	srv.logRequestHeaders(r)
 
-	tag, _ := language.MatchStrings(matcher, lang.String(), accept)
+	tag, _ := language.MatchStrings(matcher, langStr, accept)
 	lgr.WithField("tag", tag).Debug("Matched language tag")
 
 	base, _ := tag.Base()
@@ -238,7 +244,7 @@ func (srv *Server) handleHomepageRequest(w http.ResponseWriter, baseLanguage str
 	handleALocalizedFile(w, baseLanguage)
 
 	// Add reseed form with one-time token, using configured prefix for action path
-	reseedForm := `<ul><li><form method="post" action="` + srv.Prefix + `/i2pseeds.su3" class="inline">
+	reseedForm := `<ul><li><form method="post" action="` + html.EscapeString(srv.Prefix) + `/i2pseeds.su3" class="inline">
 		<input type="hidden" name="onetime" value="` + srv.Acceptable() + `">
 		<button type="submit" name="submit_param" value="submit_value" class="link-button">
 		Reseed
@@ -261,15 +267,23 @@ func handleAFile(w http.ResponseWriter, dirPath, file string) {
 	}
 	file = filepath.Join(dirPath, file)
 
+	// Verify resolved path stays within content directory (path traversal protection)
+	resolvedPath := filepath.Clean(filepath.Join(BaseContentPath, file))
+	if !strings.HasPrefix(resolvedPath, filepath.Clean(BaseContentPath)+string(filepath.Separator)) &&
+		resolvedPath != filepath.Clean(BaseContentPath) {
+		http.Error(w, "403 Forbidden", http.StatusForbidden)
+		return
+	}
+
 	cachedDataMu.RLock()
 	cached, prs := CachedDataPages[file]
 	cachedDataMu.RUnlock()
 
 	if !prs {
-		path := filepath.Join(BaseContentPath, file)
-		f, err := os.ReadFile(path)
+		f, err := os.ReadFile(resolvedPath)
 		if err != nil {
-			w.Write([]byte("Oops! Something went wrong handling your language. Please file a bug at https://i2pgit.org/go-i2p/reseed-tools\n\t" + err.Error()))
+			lgr.WithError(err).WithField("path", resolvedPath).Error("Failed to read content file")
+			http.Error(w, "404 Not Found", http.StatusNotFound)
 			return
 		}
 
@@ -296,7 +310,8 @@ func handleALocalizedFile(w http.ResponseWriter, dirPath string) {
 		dir := filepath.Join(BaseContentPath, "lang", dirPath)
 		files, err := os.ReadDir(dir)
 		if err != nil {
-			w.Write([]byte("Oops! Something went wrong handling your language. Please file a bug at https://i2pgit.org/go-i2p/reseed-tools\n\t" + err.Error()))
+			lgr.WithError(err).WithField("dir", dir).Error("Failed to read language directory")
+			http.Error(w, "500 Internal server error", http.StatusInternalServerError)
 			return
 		}
 		var f []byte
@@ -308,7 +323,8 @@ func handleALocalizedFile(w http.ResponseWriter, dirPath string) {
 			path := filepath.Join(dir, file.Name())
 			b, err := os.ReadFile(path)
 			if err != nil {
-				w.Write([]byte("Oops! Something went wrong handling your language. Please file a bug at https://i2pgit.org/go-i2p/reseed-tools\n\t" + err.Error()))
+				lgr.WithError(err).WithField("path", path).Error("Failed to read localized content file")
+				http.Error(w, "500 Internal server error", http.StatusInternalServerError)
 				return
 			}
 			f = append(f, []byte(`<div id="`+trimmedName+`">`)...)

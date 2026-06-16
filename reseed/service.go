@@ -38,9 +38,7 @@ type Peer string
 func (p Peer) Hash() uint32 {
 	// Generate deterministic hash from peer identifier for consistent SU3 selection
 	b := sha256.Sum256([]byte(p))
-	c := make([]byte, len(b))
-	copy(c, b[:])
-	return crc32.ChecksumIEEE(c)
+	return crc32.ChecksumIEEE(b[:])
 }
 
 /*type Reseeder interface {

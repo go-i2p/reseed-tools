@@ -395,8 +395,7 @@ func validateRequiredConfig(c *cli.Context) (string, string, error) {
 // setupRemoteNetDBSharing configures and starts remote NetDB downloading if share-peer is specified.
 func setupRemoteNetDBSharing(c *cli.Context) error {
 	if c.String("share-peer") != "" {
-		count := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-		for i := range count {
+		for i := 0; i < 10; i++ {
 			err := downloadRemoteNetDB(c.String("share-peer"), c.String("share-password"), c.String("netdb"), c.String("samaddr"))
 			if err != nil {
 				lgr.WithError(err).WithField("attempt", i).WithField("attempts_remaining", 10-i).Warn("Error downloading remote netDb, retrying in 10 seconds")

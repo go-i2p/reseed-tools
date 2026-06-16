@@ -310,8 +310,8 @@ func (srv *Server) Acceptable() string {
 	srv.cleanupExpiredTokensUnsafe()
 
 	// If still too many entries, remove oldest ones
-	if len(srv.acceptables) > 50 {
-		srv.evictOldestTokensUnsafe(50)
+	if len(srv.acceptables) >= 50 {
+		srv.evictOldestTokensUnsafe(49)
 	}
 
 	acceptme := SecureRandomAlphaString()

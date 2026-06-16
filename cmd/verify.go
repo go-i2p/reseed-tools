@@ -24,7 +24,7 @@ func I2PHome() string {
 	// Get current user's home directory for standard I2P paths
 	usr, err := user.Current()
 	if nil != err {
-		panic(err)
+		return ""
 	}
 	// Check for i2p-config directory (common on Linux distributions)
 	sysCheck := filepath.Join(usr.HomeDir, "i2p-config")

@@ -252,7 +252,11 @@ func shouldSkipFile(info os.FileInfo, netDbDir, path string) bool {
 // calculateRelativePath computes the relative path of a file within the netDb directory.
 // This ensures proper archive structure by removing the base directory prefix.
 func calculateRelativePath(netDbDir, path string) string {
-	return path[len(netDbDir):]
+	rel, err := filepath.Rel(netDbDir, path)
+	if err != nil {
+		return filepath.Base(path)
+	}
+	return rel
 }
 
 // processFileForArchive handles the complete process of adding a single file to the tar archive.
@@ -274,18 +278,18 @@ func processFileForArchive(tw *tar.Writer, netDbDir, path string, info os.FileIn
 func addFileToArchive(tw *tar.Writer, file *os.File, info os.FileInfo, relativePath string) error {
 	header, err := tar.FileInfoHeader(info, relativePath)
 	if err != nil {
-		lgr.WithError(err).Fatal("Fatal error in share")
+		lgr.WithError(err).Error("Error creating tar header in share")
 		return err
 	}
 
 	header.Name = relativePath
 	if err = tw.WriteHeader(header); err != nil {
-		lgr.WithError(err).Fatal("Fatal error in share")
+		lgr.WithError(err).Error("Error writing tar header in share")
 		return err
 	}
 
 	if _, err := io.Copy(tw, file); err != nil {
-		lgr.WithError(err).Fatal("Fatal error in share")
+		lgr.WithError(err).Error("Error copying file to tar in share")
 		return err
 	}
 
