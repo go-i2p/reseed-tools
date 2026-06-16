@@ -2,6 +2,7 @@ package reseed
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -98,6 +99,10 @@ func (ln blacklistListener) Accept() (net.Conn, error) {
 	return tc, err
 }
 
-func newBlacklistListener(ln net.Listener, bl *Blacklist) blacklistListener {
-	return blacklistListener{ln.(*net.TCPListener), bl}
+func newBlacklistListener(ln net.Listener, bl *Blacklist) (blacklistListener, error) {
+	tcpLn, ok := ln.(*net.TCPListener)
+	if !ok {
+		return blacklistListener{}, fmt.Errorf("expected *net.TCPListener, got %T", ln)
+	}
+	return blacklistListener{tcpLn, bl}, nil
 }

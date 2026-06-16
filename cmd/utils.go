@@ -436,14 +436,10 @@ func generateAndSaveSigningCRL(signerID string, signerKey *rsa.PrivateKey, signe
 		return fmt.Errorf("certificate with unknown critical extension was not parsed: %s", err)
 	}
 
-	// Create revoked certificate entry for testing purposes
+	// Generate empty CRL with no revoked certificates
+	// (unless a revocation feature is implemented, the CRL should list no revoked certs)
 	now := time.Now()
-	revokedCerts := []pkix.RevokedCertificate{
-		{
-			SerialNumber:   crlcert.SerialNumber,
-			RevocationTime: now,
-		},
-	}
+	revokedCerts := []pkix.RevokedCertificate{}
 
 	// Generate CRL bytes
 	crlBytes, err := crlcert.CreateCRL(rand.Reader, signerKey, revokedCerts, now, now)

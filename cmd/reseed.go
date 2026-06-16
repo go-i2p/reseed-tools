@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -14,7 +15,7 @@ import (
 	"syscall"
 
 	//"flag"
-	"io/ioutil"
+
 	"net"
 	"os"
 	"runtime"
@@ -376,12 +377,17 @@ func validateRequiredConfig(c *cli.Context) (string, string, error) {
 			fmt.Println("--signer must be an email address or a file containing an email address.")
 			return "", "", fmt.Errorf("--signer must be an email address or a file containing an email address.")
 		}
-		bytes, err := ioutil.ReadFile(signerID)
+		bytes, err := os.ReadFile(signerID)
 		if err != nil {
 			fmt.Println("--signer must be an email address or a file containing an email address.")
 			return "", "", fmt.Errorf("--signer must be an email address or a file containing an email address.")
 		}
-		signerID = string(bytes)
+		signerID = strings.TrimSpace(string(bytes))
+		// Validate that the file content is a valid email format
+		if !strings.Contains(signerID, "@") {
+			fmt.Println("--signer file must contain a valid email address.")
+			return "", "", fmt.Errorf("--signer file must contain a valid email address.")
+		}
 	}
 
 	return netdbDir, signerID, nil
@@ -558,7 +564,7 @@ func setupI2PTLSCertificate(c *cli.Context, tlsConfig *tlsConfiguration) error {
 // loadOrGenerateOnionKey loads an existing onion key from file or generates a new one.
 func loadOrGenerateOnionKey(keyPath string) ([]byte, error) {
 	if _, err := os.Stat(keyPath); err == nil {
-		key, err := ioutil.ReadFile(keyPath)
+		key, err := os.ReadFile(keyPath)
 		if err != nil {
 			return nil, err
 		}
@@ -827,7 +833,7 @@ func createTorListenConf(port int, key ed25519.PrivateKey, remotePorts []int, si
 
 // handleOnionKeyBasedService manages onion service startup based on existing key file.
 func handleOnionKeyBasedService(server *reseed.Server, c *cli.Context, port int, onionTlsCert, onionTlsKey string) error {
-	ok, err := ioutil.ReadFile(c.String("onionKey"))
+	ok, err := os.ReadFile(c.String("onionKey"))
 	if err != nil {
 		return fmt.Errorf("failed to read onion key: %w", err)
 	}
@@ -1154,12 +1160,15 @@ func downloadAndSaveNetDB(client *http.Client, url *url.URL, password string) er
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	// Limit response body to 200MB to prevent OOM on malicious responses
+	const maxBodySize = 200 * 1024 * 1024
+	limitedBody := io.LimitReader(resp.Body, maxBodySize)
+	bodyBytes, err := io.ReadAll(limitedBody)
 	if err != nil {
 		return err
 	}
 
-	return ioutil.WriteFile("netDb.tar.gz", bodyBytes, 0o644)
+	return os.WriteFile("netDb.tar.gz", bodyBytes, 0o644)
 }
 
 // extractAndCopyNetDB extracts the netDb archive and copies it to the target directory.

@@ -51,6 +51,9 @@ type Server struct {
 	OnionListener net.Listener
 	Onion         *onramp.Onion
 
+	// URL prefix for routing custom paths
+	Prefix string
+
 	// Rate limiting configuration for request throttling
 	RequestRateLimit   int
 	requestRateStore   throttled.Store
@@ -87,7 +90,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 	h := &http.Server{TLSConfig: config}
 
-	server := Server{Server: h, Reseeder: nil, RequestRateLimit: requestRateLimit, WebRateLimit: webRateLimit, GlobalRateLimit: globalRateLimit}
+	server := Server{Server: h, Prefix: prefix, Reseeder: nil, RequestRateLimit: requestRateLimit, WebRateLimit: webRateLimit, GlobalRateLimit: globalRateLimit}
 
 	/*
 		Disable this for now, I was working on it before the CPU exhaustion fixes

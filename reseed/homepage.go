@@ -96,9 +96,9 @@ var footer = []byte(`  </body>
 </html>`)
 
 // md provides configured markdown processor for reseed server content rendering.
-// It supports XHTML output and embedded HTML for converting markdown files to
-// properly formatted web content with security and standards compliance.
-var md = markdown.New(markdown.XHTMLOutput(true), markdown.HTML(true))
+// It supports XHTML output with HTML embedding disabled for security.
+// Content files are controlled by the server operator and must be trusted.
+var md = markdown.New(markdown.XHTMLOutput(true), markdown.HTML(false))
 
 // ContentPath determines the filesystem path where reseed server content should be stored.
 // It checks the current working directory and creates a content subdirectory for serving
@@ -232,8 +232,8 @@ func (srv *Server) handleHomepageRequest(w http.ResponseWriter, baseLanguage str
 	w.Write([]byte(header))
 	handleALocalizedFile(w, baseLanguage)
 
-	// Add reseed form with one-time token
-	reseedForm := `<ul><li><form method="post" action="/i2pseeds" class="inline">
+	// Add reseed form with one-time token, using configured prefix for action path
+	reseedForm := `<ul><li><form method="post" action="` + srv.Prefix + `/i2pseeds.su3" class="inline">
 		<input type="hidden" name="onetime" value="` + srv.Acceptable() + `">
 		<button type="submit" name="submit_param" value="submit_value" class="link-button">
 		Reseed
@@ -249,7 +249,11 @@ func (srv *Server) handleHomepageRequest(w http.ResponseWriter, baseLanguage str
 // It loads files from the filesystem on first access and caches them in memory for
 // improved performance on subsequent requests, supporting CSS, JavaScript, and image files.
 func handleAFile(w http.ResponseWriter, dirPath, file string) {
-	BaseContentPath, _ := StableContentPath()
+	BaseContentPath, err := StableContentPath()
+	if err != nil {
+		http.Error(w, "500 Internal server error", http.StatusInternalServerError)
+		return
+	}
 	file = filepath.Join(dirPath, file)
 
 	cachedDataMu.RLock()

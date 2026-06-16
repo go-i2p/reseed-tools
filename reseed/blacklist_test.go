@@ -245,7 +245,10 @@ func TestNewBlacklistListener(t *testing.T) {
 	}
 	defer listener.Close()
 
-	blListener := newBlacklistListener(listener, bl)
+	blListener, err := newBlacklistListener(listener, bl)
+	if err != nil {
+		t.Fatalf("Failed to create blacklist listener: %v", err)
+	}
 
 	if blListener.blacklist != bl {
 		t.Error("blacklist reference not set correctly")
@@ -266,7 +269,10 @@ func TestBlacklistListener_Accept_AllowedConnection(t *testing.T) {
 	}
 	defer listener.Close()
 
-	blListener := newBlacklistListener(listener, bl)
+	blListener, err := newBlacklistListener(listener, bl)
+	if err != nil {
+		t.Fatalf("Failed to create blacklist listener: %v", err)
+	}
 
 	// Create a connection in a goroutine
 	go func() {
@@ -302,7 +308,10 @@ func TestBlacklistListener_Accept_BlockedConnection(t *testing.T) {
 	}
 	defer listener.Close()
 
-	blListener := newBlacklistListener(listener, bl)
+	blListener, err := newBlacklistListener(listener, bl)
+	if err != nil {
+		t.Fatalf("Failed to create blacklist listener: %v", err)
+	}
 
 	// Create a connection in a goroutine
 	go func() {
@@ -344,7 +353,10 @@ func TestBlacklistListener_Accept_ErrorBehavior(t *testing.T) {
 	}
 	defer listener.Close()
 
-	blListener := newBlacklistListener(listener, bl)
+	blListener, err := newBlacklistListener(listener, bl)
+	if err != nil {
+		t.Fatalf("Failed to create blacklist listener: %v", err)
+	}
 
 	// Create a connection from the blacklisted IP
 	go func() {

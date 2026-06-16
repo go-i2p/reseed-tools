@@ -24,7 +24,12 @@ func (srv *Server) ListenAndServe() error {
 		return err
 	}
 
-	return srv.Serve(newBlacklistListener(ln, srv.Blacklist))
+	blListener, err := newBlacklistListener(ln, srv.Blacklist)
+	if err != nil {
+		ln.Close()
+		return err
+	}
+	return srv.Serve(blListener)
 }
 
 // ListenAndServeTLS starts the server using HTTPS with the provided certificate
@@ -55,7 +60,12 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 		return err
 	}
 
-	tlsListener := tls.NewListener(newBlacklistListener(ln, srv.Blacklist), srv.TLSConfig)
+	blListener, err := newBlacklistListener(ln, srv.Blacklist)
+	if err != nil {
+		ln.Close()
+		return err
+	}
+	tlsListener := tls.NewListener(blListener, srv.TLSConfig)
 	return srv.Serve(tlsListener)
 }
 
