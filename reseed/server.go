@@ -164,6 +164,7 @@ func NewServer(prefix string, trustProxy bool, samaddr string, requestRateLimit,
 	}
 
 	errorHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusNotFound)
 		if _, err := w.Write(nil); nil != err {
 			lgr.WithError(err).Error("Error writing HTTP response")
