@@ -605,7 +605,7 @@ func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
 
 	configureOnionTlsHost(tlsConfig, onionKey)
 
-	err = ioutil.WriteFile(c.String("onionKey"), onionKey, 0o644)
+	err = os.WriteFile(c.String("onionKey"), onionKey, 0o600)
 	if err != nil {
 		lgr.WithError(err).Fatal("Fatal error")
 	}

@@ -214,7 +214,7 @@ func SecureRandomAlphaString() string {
 			randomBytes = SecureRandomBytes(bufferSize)
 		}
 		// Filter random bytes to only include valid letter indices
-		if idx := int(randomBytes[j%length] & letterIdxMask); idx < len(letterBytes) {
+		if idx := int(randomBytes[j%bufferSize] & letterIdxMask); idx < len(letterBytes) {
 			result[i] = letterBytes[idx]
 			i++
 		}
@@ -426,7 +426,8 @@ func proxiedMiddleware(next http.Handler) http.Handler {
 				clientIP := strings.TrimSpace(ips[0])
 				// Validate that it's a valid IP address before using it
 				if net.ParseIP(clientIP) != nil {
-					r.RemoteAddr = clientIP
+					// Append dummy port 0 to match "host:port" format expected by downstream code
+					r.RemoteAddr = net.JoinHostPort(clientIP, "0")
 				}
 				// If invalid, leave r.RemoteAddr unchanged (use original value)
 			}

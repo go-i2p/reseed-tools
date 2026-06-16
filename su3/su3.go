@@ -538,10 +538,10 @@ func (s *File) String() string {
 	// Format SU3 file metadata in a readable table structure
 	// Display key fields with proper formatting and null-byte trimming
 	fmt.Fprintln(&b, "---------------------------")
-	fmt.Fprintf(&b, "Format: %q\n", s.Format)
-	fmt.Fprintf(&b, "SignatureType: %q\n", s.SignatureType)
-	fmt.Fprintf(&b, "FileType: %q\n", s.FileType)
-	fmt.Fprintf(&b, "ContentType: %q\n", s.ContentType)
+	fmt.Fprintf(&b, "Format: %d\n", s.Format)
+	fmt.Fprintf(&b, "SignatureType: %d\n", s.SignatureType)
+	fmt.Fprintf(&b, "FileType: %d\n", s.FileType)
+	fmt.Fprintf(&b, "ContentType: %d\n", s.ContentType)
 	fmt.Fprintf(&b, "Version: %q\n", bytes.Trim(s.Version, "\x00"))
 	fmt.Fprintf(&b, "SignerId: %q\n", s.SignerID)
 	fmt.Fprintf(&b, "---------------------------")

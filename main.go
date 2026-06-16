@@ -13,8 +13,8 @@ import (
 var lgr = logger.GetGoI2PLogger()
 
 func main() {
-	// use at most half the cpu cores
-	runtime.GOMAXPROCS(runtime.NumCPU() / 2)
+	// use at most half the cpu cores, but at least 1 core on single-core systems
+	runtime.GOMAXPROCS(max(runtime.NumCPU()/2, 1))
 
 	app := cli.NewApp()
 	app.Name = "reseed-tools"

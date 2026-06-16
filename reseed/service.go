@@ -35,12 +35,12 @@ type routerInfo struct {
 // different peers receive different router sets for improved network diversity.
 type Peer string
 
-func (p Peer) Hash() int {
+func (p Peer) Hash() uint32 {
 	// Generate deterministic hash from peer identifier for consistent SU3 selection
 	b := sha256.Sum256([]byte(p))
 	c := make([]byte, len(b))
 	copy(c, b[:])
-	return int(crc32.ChecksumIEEE(c))
+	return crc32.ChecksumIEEE(c)
 }
 
 /*type Reseeder interface {
@@ -266,11 +266,8 @@ func (rs *ReseederImpl) PeerSu3Bytes(peer Peer) ([]byte, error) {
 		return nil, errors.New("502: Internal service error, no reseed file available")
 	}
 
-	// Additional safety: ensure index is valid (defense in depth)
-	index := int(peer.Hash()) % len(m)
-	if index < 0 || index >= len(m) {
-		return nil, errors.New("404: Reseed file not found")
-	}
+	// Use unsigned arithmetic to avoid negative index issues
+	index := int(peer.Hash() % uint32(len(m)))
 
 	return m[index], nil
 }
