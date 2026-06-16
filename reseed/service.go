@@ -258,7 +258,11 @@ func (rs *ReseederImpl) su3Builder(in <-chan []routerInfo) <-chan *su3.File {
 
 // PeerSu3Bytes returns a pre-built SU3 file selected deterministically based on
 // the peer's hash. This ensures the same peer consistently receives the same
-// reseed bundle within a rebuild cycle.
+// reseed bundle within a single rebuild cycle. However, after a rebuild cycle
+// completes and su3s is updated with new files, the same peer may receive a
+// different file (because len(m) may change). This is by design and not a bug:
+// determinism is maintained within a rebuild interval for consistent delivery,
+// not across rebuild boundaries.
 func (rs *ReseederImpl) PeerSu3Bytes(peer Peer) ([]byte, error) {
 	m := rs.su3s.Load().([][]byte)
 

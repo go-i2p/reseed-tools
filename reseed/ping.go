@@ -111,6 +111,11 @@ var lastPing = yday()
 // Implements rate limiting to prevent excessive pinging (once per 24 hours) and
 // returns a slice of status strings indicating success or failure for each server.
 // Thread-safe: uses pingMu to synchronize access to lastPing.
+// Note: The rate-limiting check and actual ping execution are separated to avoid
+// holding the lock during network I/O. This creates a brief window where multiple
+// goroutines could pass the rate-limit check concurrently, but this is acceptable
+// because (a) pings are idempotent, (b) the rate-limit is a courtesy check not a
+// security boundary, and (c) occasional concurrent pings cause minimal overhead.
 func PingEverybody() []string {
 	pingMu.Lock()
 	// Enforce rate limiting to prevent server abuse
