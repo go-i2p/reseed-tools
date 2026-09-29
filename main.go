@@ -17,24 +17,22 @@ func main() {
 	// use at most half the cpu cores, but at least 1 core on single-core systems
 	runtime.GOMAXPROCS(max(runtime.NumCPU()/2, 1))
 
-	app := cli.NewApp()
-	app.Name = "reseed-tools"
-	app.Version = reseed.Version
-	app.Usage = "I2P tools and reseed server"
-	auth := &cli.Author{
-		Name:  "go-i2p",
-		Email: "hankhill19580@gmail.com",
-	}
-	app.Authors = append(app.Authors, auth)
-	app.Flags = []cli.Flag{}
-	app.Commands = []*cli.Command{
-		cmd.NewReseedCommand(),
-		cmd.NewSu3VerifyCommand(),
-		cmd.NewKeygenCommand(),
-		cmd.NewShareCommand(),
-		cmd.NewDiagnoseCommand(),
-		cmd.NewVersionCommand(),
-		// cmd.NewSu3VerifyPublicCommand(),
+	app := &cli.Command{
+		Name:    "reseed-tools",
+		Version: reseed.Version,
+		Usage:   "I2P tools and reseed server",
+		Authors: []any{
+			"go-i2p <hankhill19580@gmail.com>",
+		},
+		Commands: []*cli.Command{
+			cmd.NewReseedCommand(),
+			cmd.NewSu3VerifyCommand(),
+			cmd.NewKeygenCommand(),
+			cmd.NewShareCommand(),
+			cmd.NewDiagnoseCommand(),
+			cmd.NewVersionCommand(),
+			// cmd.NewSu3VerifyPublicCommand(),
+		},
 	}
 
 	if err := app.Run(context.Background(), os.Args); err != nil {
