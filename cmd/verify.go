@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto/x509"
 	"fmt"
 	"os"
@@ -68,15 +69,15 @@ func NewSu3VerifyCommand() *cli.Command {
 }
 
 // su3VerifyAction performs comprehensive verification of SU3 files including signature validation.
-func su3VerifyAction(c *cli.Context) error {
-	su3File, err := loadAndParseSU3File(c.Args().Get(0))
+func su3VerifyAction(ctx context.Context, cmd *cli.Command) error {
+	su3File, err := loadAndParseSU3File(cmd.Args().Get(0))
 	if err != nil {
 		return err
 	}
 
 	fmt.Println(su3File.String())
 
-	cert, err := configureAndGetCertificate(c, su3File)
+	cert, err := configureAndGetCertificate(cmd, su3File)
 	if err != nil {
 		return err
 	}
@@ -86,7 +87,7 @@ func su3VerifyAction(c *cli.Context) error {
 		return err
 	}
 
-	if c.Bool("extract") {
+	if cmd.Bool("extract") {
 		return extractSU3Content(su3File)
 	}
 
@@ -110,8 +111,8 @@ func loadAndParseSU3File(filePath string) (*su3.File, error) {
 }
 
 // configureAndGetCertificate sets up keystore configuration and retrieves the reseeder certificate.
-func configureAndGetCertificate(c *cli.Context, su3File *su3.File) (*x509.Certificate, error) {
-	absPath, err := filepath.Abs(c.String("keystore"))
+func configureAndGetCertificate(cmd *cli.Command, su3File *su3.File) (*x509.Certificate, error) {
+	absPath, err := filepath.Abs(cmd.String("keystore"))
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +123,8 @@ func configureAndGetCertificate(c *cli.Context, su3File *su3.File) (*x509.Certif
 	// get the reseeder key
 	ks := reseed.KeyStore{Path: keyStorePath}
 
-	if c.String("signer") != "" {
-		su3File.SignerID = []byte(c.String("signer"))
+	if cmd.String("signer") != "" {
+		su3File.SignerID = []byte(cmd.String("signer"))
 	}
 
 	lgr.WithField("keystore", absPath).WithField("purpose", reseedDir).WithField("signer", string(su3File.SignerID)).Debug("Using keystore")

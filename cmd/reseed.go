@@ -61,8 +61,8 @@ func getHostName() string {
 	return strings.Replace(hostname, "\n", "", -1)
 }
 
-func providedReseeds(c *cli.Context) []string {
-	reseedArg := c.StringSlice("friends")
+func providedReseeds(cmd *cli.Command) []string {
+	reseedArg := cmd.StringSlice("friends")
 	reseed.AllReseeds = reseedArg
 	return reseed.AllReseeds
 }
@@ -182,7 +182,7 @@ func NewReseedCommand() *cli.Command {
 			},
 			&cli.StringSliceFlag{
 				Name:  "friends",
-				Value: cli.NewStringSlice(reseed.AllReseeds...),
+				Value: cli.NewStringSlice(reseed.AllReseeds...).Value(),
 				Usage: "Ping other reseed servers and display the result on the homepage to provide information about reseed uptime.",
 			},
 			&cli.StringFlag{
@@ -226,9 +226,9 @@ func NewReseedCommand() *cli.Command {
 // CreateEepServiceKey generates new I2P keys for eepSite (hidden service) operation.
 // It connects to the I2P SAM interface and creates a fresh key pair for hosting services
 // on the I2P network. Returns the generated keys or an error if SAM connection fails.
-func CreateEepServiceKey(c *cli.Context) (i2pkeys.I2PKeys, error) {
+func CreateEepServiceKey(cmd *cli.Command) (i2pkeys.I2PKeys, error) {
 	// Connect to I2P SAM interface for key generation
-	sam, err := sam3.NewSAM(c.String("samaddr"))
+	sam, err := sam3.NewSAM(cmd.String("samaddr"))
 	if err != nil {
 		return i2pkeys.I2PKeys{}, err
 	}
@@ -244,10 +244,10 @@ func CreateEepServiceKey(c *cli.Context) (i2pkeys.I2PKeys, error) {
 // LoadKeys loads existing I2P keys from file or creates new ones if the file doesn't exist.
 // This function handles the key management lifecycle for I2P services, automatically
 // generating keys when needed and persisting them for reuse across restarts.
-func LoadKeys(keysPath string, c *cli.Context) (i2pkeys.I2PKeys, error) {
+func LoadKeys(keysPath string, cmd *cli.Command) (i2pkeys.I2PKeys, error) {
 	// Check if keys file exists, create new keys if not found
 	if _, err := os.Stat(keysPath); os.IsNotExist(err) {
-		return createAndStoreNewKeys(keysPath, c)
+		return createAndStoreNewKeys(keysPath, cmd)
 	} else if err == nil {
 		return loadExistingKeys(keysPath)
 	} else {
@@ -256,8 +256,8 @@ func LoadKeys(keysPath string, c *cli.Context) (i2pkeys.I2PKeys, error) {
 }
 
 // createAndStoreNewKeys generates new I2P keys and saves them to the specified file path.
-func createAndStoreNewKeys(keysPath string, c *cli.Context) (i2pkeys.I2PKeys, error) {
-	keys, err := CreateEepServiceKey(c)
+func createAndStoreNewKeys(keysPath string, cmd *cli.Command) (i2pkeys.I2PKeys, error) {
+	keys, err := CreateEepServiceKey(cmd)
 	if err != nil {
 		return i2pkeys.I2PKeys{}, err
 	}
@@ -309,63 +309,63 @@ func fileExists(filename string) bool {
 
 // reseedAction is the main entry point for the reseed command.
 // It orchestrates the configuration and startup of the reseed server.
-func reseedAction(c *cli.Context) error {
+func reseedAction(ctx context.Context, cmd *cli.Command) error {
 	// Validate required configuration parameters
-	netdbDir, signerID, err := validateRequiredConfig(c)
+	netdbDir, signerID, err := validateRequiredConfig(cmd)
 	if err != nil {
 		return err
 	}
 
 	// Setup remote NetDB sharing if configured
-	if err := setupRemoteNetDBSharing(c); err != nil {
+	if err := setupRemoteNetDBSharing(cmd); err != nil {
 		return err
 	}
 
 	// Configure TLS certificates for all protocols
-	tlsConfig, err := configureTLSCertificates(c)
+	tlsConfig, err := configureTLSCertificates(cmd)
 	if err != nil {
 		return err
 	}
 
 	// Setup I2P keys if I2P protocol is enabled
-	i2pkey, err := setupI2PKeys(c, tlsConfig)
+	i2pkey, err := setupI2PKeys(cmd, tlsConfig)
 	if err != nil {
 		return err
 	}
 
 	// Setup Onion keys if Onion protocol is enabled
-	if err := setupOnionKeys(c, tlsConfig); err != nil {
+	if err := setupOnionKeys(cmd, tlsConfig); err != nil {
 		return err
 	}
 
 	// Parse configuration and setup signing keys
-	reloadIntvl, privKey, err := setupSigningConfiguration(c, signerID)
+	reloadIntvl, privKey, err := setupSigningConfiguration(cmd, signerID)
 	if err != nil {
 		return err
 	}
 
 	// Initialize reseeder with configured parameters
-	reseeder, err := initializeReseeder(c, netdbDir, signerID, privKey, reloadIntvl)
+	reseeder, err := initializeReseeder(cmd, netdbDir, signerID, privKey, reloadIntvl)
 	if err != nil {
 		return err
 	}
 
 	// Start all configured servers
-	startConfiguredServers(c, tlsConfig, i2pkey, reseeder)
+	startConfiguredServers(cmd, tlsConfig, i2pkey, reseeder)
 	return nil
 }
 
 // validateRequiredConfig validates and returns the required netdb and signer configuration.
-func validateRequiredConfig(c *cli.Context) (string, string, error) {
-	providedReseeds(c)
+func validateRequiredConfig(cmd *cli.Command) (string, string, error) {
+	providedReseeds(cmd)
 
-	netdbDir := c.String("netdb")
+	netdbDir := cmd.String("netdb")
 	if netdbDir == "" {
 		fmt.Println("--netdb is required")
 		return "", "", fmt.Errorf("--netdb is required")
 	}
 
-	signerID := c.String("signer")
+	signerID := cmd.String("signer")
 	if signerID == "" || signerID == "you@mail.i2p" {
 		fmt.Println("--signer is required")
 		return "", "", fmt.Errorf("--signer is required")
@@ -393,10 +393,10 @@ func validateRequiredConfig(c *cli.Context) (string, string, error) {
 }
 
 // setupRemoteNetDBSharing configures and starts remote NetDB downloading if share-peer is specified.
-func setupRemoteNetDBSharing(c *cli.Context) error {
-	if c.String("share-peer") != "" {
+func setupRemoteNetDBSharing(cmd *cli.Command) error {
+	if cmd.String("share-peer") != "" {
 		for i := 0; i < 10; i++ {
-			err := downloadRemoteNetDB(c.String("share-peer"), c.String("share-password"), c.String("netdb"), c.String("samaddr"))
+			err := downloadRemoteNetDB(cmd.String("share-peer"), cmd.String("share-password"), cmd.String("netdb"), cmd.String("samaddr"))
 			if err != nil {
 				lgr.WithError(err).WithField("attempt", i).WithField("attempts_remaining", 10-i).Warn("Error downloading remote netDb, retrying in 10 seconds")
 				time.Sleep(time.Second * 10)
@@ -405,10 +405,10 @@ func setupRemoteNetDBSharing(c *cli.Context) error {
 			}
 		}
 		// Store config for later goroutine startup in startConfiguredServers
-		setupRemoteNetDBConfig.remote = c.String("share-peer")
-		setupRemoteNetDBConfig.password = c.String("share-password")
-		setupRemoteNetDBConfig.path = c.String("netdb")
-		setupRemoteNetDBConfig.samaddr = c.String("samaddr")
+		setupRemoteNetDBConfig.remote = cmd.String("share-peer")
+		setupRemoteNetDBConfig.password = cmd.String("share-password")
+		setupRemoteNetDBConfig.path = cmd.String("netdb")
+		setupRemoteNetDBConfig.samaddr = cmd.String("samaddr")
 	}
 	return nil
 }
@@ -432,19 +432,19 @@ type tlsConfiguration struct {
 }
 
 // configureTLSCertificates sets up TLS certificates and keys for HTTP/HTTPS protocol.
-func configureTLSCertificates(c *cli.Context) (*tlsConfiguration, error) {
+func configureTLSCertificates(cmd *cli.Command) (*tlsConfiguration, error) {
 	config := &tlsConfiguration{
-		tlsHost: c.String("tlsHost"),
+		tlsHost: cmd.String("tlsHost"),
 	}
 
 	if config.tlsHost != "" {
 		setupTLSHostConfiguration(config)
-		setupTLSKeyPaths(c, config)
-		setupTLSCertPaths(c, config)
+		setupTLSKeyPaths(cmd, config)
+		setupTLSCertPaths(cmd, config)
 
-		ignore := c.Bool("trustProxy")
+		ignore := cmd.Bool("trustProxy")
 		if !ignore {
-			err := validateAndProvisionCertificates(c, config)
+			err := validateAndProvisionCertificates(cmd, config)
 			if err != nil {
 				return nil, err
 			}
@@ -461,8 +461,8 @@ func setupTLSHostConfiguration(config *tlsConfiguration) {
 }
 
 // setupTLSKeyPaths configures TLS key file paths with defaults if not specified.
-func setupTLSKeyPaths(c *cli.Context, config *tlsConfiguration) {
-	config.tlsKey = c.String("tlsKey")
+func setupTLSKeyPaths(cmd *cli.Command, config *tlsConfiguration) {
+	config.tlsKey = cmd.String("tlsKey")
 	if config.tlsKey == "" {
 		defaultKeyPath := config.tlsHost + ".pem"
 		config.tlsKey = defaultKeyPath
@@ -472,8 +472,8 @@ func setupTLSKeyPaths(c *cli.Context, config *tlsConfiguration) {
 }
 
 // setupTLSCertPaths configures TLS certificate file paths with defaults if not specified.
-func setupTLSCertPaths(c *cli.Context, config *tlsConfiguration) {
-	config.tlsCert = c.String("tlsCert")
+func setupTLSCertPaths(cmd *cli.Command, config *tlsConfiguration) {
+	config.tlsCert = cmd.String("tlsCert")
 	if config.tlsCert == "" {
 		defaultCertPath := config.tlsHost + ".crt"
 		config.tlsCert = defaultCertPath
@@ -483,12 +483,12 @@ func setupTLSCertPaths(c *cli.Context, config *tlsConfiguration) {
 }
 
 // validateAndProvisionCertificates handles certificate validation and generation based on configuration.
-func validateAndProvisionCertificates(c *cli.Context, config *tlsConfiguration) error {
-	auto := c.Bool("yes")
-	acme := c.Bool("acme")
+func validateAndProvisionCertificates(cmd *cli.Command, config *tlsConfiguration) error {
+	auto := cmd.Bool("yes")
+	acme := cmd.Bool("acme")
 
 	if acme {
-		acmeserver := c.String("acmeserver")
+		acmeserver := cmd.String("acmeserver")
 		err := checkUseAcmeCert(config.tlsHost, "", acmeserver, &config.tlsCert, &config.tlsKey, auto)
 		if err != nil {
 			lgr.WithError(err).Fatal("Fatal error")
@@ -503,22 +503,22 @@ func validateAndProvisionCertificates(c *cli.Context, config *tlsConfiguration) 
 }
 
 // setupI2PKeys configures I2P keys and TLS certificates if I2P protocol is enabled.
-func setupI2PKeys(c *cli.Context, tlsConfig *tlsConfiguration) (i2pkeys.I2PKeys, error) {
+func setupI2PKeys(cmd *cli.Command, tlsConfig *tlsConfiguration) (i2pkeys.I2PKeys, error) {
 	var i2pkey i2pkeys.I2PKeys
 
-	if !c.Bool("i2p") {
+	if !cmd.Bool("i2p") {
 		return i2pkey, nil
 	}
 
 	var err error
-	i2pkey, err = LoadKeys("reseed.i2pkeys", c)
+	i2pkey, err = LoadKeys("reseed.i2pkeys", cmd)
 	if err != nil {
 		lgr.WithError(err).Fatal("Fatal error")
 	}
 
 	configureI2PTLSSettings(tlsConfig, i2pkey)
 
-	if err := setupI2PTLSCertificate(c, tlsConfig); err != nil {
+	if err := setupI2PTLSCertificate(cmd, tlsConfig); err != nil {
 		lgr.WithError(err).Fatal("Fatal error")
 	}
 
@@ -545,13 +545,13 @@ func configureI2PTLSSettings(tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys
 
 // setupI2PTLSCertificate ensures I2P TLS certificates are available if not using a trusted proxy.
 // It checks or creates new TLS certificates based on the configuration settings.
-func setupI2PTLSCertificate(c *cli.Context, tlsConfig *tlsConfiguration) error {
+func setupI2PTLSCertificate(cmd *cli.Command, tlsConfig *tlsConfiguration) error {
 	if tlsConfig.i2pTlsHost == "" {
 		return nil
 	}
 
-	auto := c.Bool("yes")
-	ignore := c.Bool("trustProxy")
+	auto := cmd.Bool("yes")
+	ignore := cmd.Bool("trustProxy")
 	if ignore {
 		return nil
 	}
@@ -595,13 +595,13 @@ func configureOnionTlsPaths(tlsConfig *tlsConfiguration) {
 }
 
 // setupOnionTlsCertificate creates or validates TLS certificates for onion services.
-func setupOnionTlsCertificate(c *cli.Context, tlsConfig *tlsConfiguration) error {
+func setupOnionTlsCertificate(cmd *cli.Command, tlsConfig *tlsConfiguration) error {
 	if tlsConfig.onionTlsHost == "" {
 		return nil
 	}
 
-	auto := c.Bool("yes")
-	ignore := c.Bool("trustProxy")
+	auto := cmd.Bool("yes")
+	ignore := cmd.Bool("trustProxy")
 	if !ignore {
 		return checkOrNewTLSCert(tlsConfig.onionTlsHost, &tlsConfig.onionTlsCert, &tlsConfig.onionTlsKey, auto)
 	}
@@ -609,26 +609,26 @@ func setupOnionTlsCertificate(c *cli.Context, tlsConfig *tlsConfiguration) error
 }
 
 // setupOnionKeys configures Onion service keys and TLS certificates if Onion protocol is enabled.
-func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
-	if !c.Bool("onion") {
+func setupOnionKeys(cmd *cli.Command, tlsConfig *tlsConfiguration) error {
+	if !cmd.Bool("onion") {
 		return nil
 	}
 
-	onionKey, err := loadOrGenerateOnionKey(c.String("onionKey"))
+	onionKey, err := loadOrGenerateOnionKey(cmd.String("onionKey"))
 	if err != nil {
 		lgr.WithError(err).Fatal("Fatal error")
 	}
 
 	configureOnionTlsHost(tlsConfig, onionKey)
 
-	err = os.WriteFile(c.String("onionKey"), onionKey, 0o600)
+	err = os.WriteFile(cmd.String("onionKey"), onionKey, 0o600)
 	if err != nil {
 		lgr.WithError(err).Fatal("Fatal error")
 	}
 
 	configureOnionTlsPaths(tlsConfig)
 
-	err = setupOnionTlsCertificate(c, tlsConfig)
+	err = setupOnionTlsCertificate(cmd, tlsConfig)
 	if err != nil {
 		lgr.WithError(err).Fatal("Fatal error")
 	}
@@ -637,19 +637,19 @@ func setupOnionKeys(c *cli.Context, tlsConfig *tlsConfiguration) error {
 }
 
 // setupSigningConfiguration parses duration and sets up signing certificates.
-func setupSigningConfiguration(c *cli.Context, signerID string) (time.Duration, *rsa.PrivateKey, error) {
-	reloadIntvl, err := time.ParseDuration(c.String("interval"))
+func setupSigningConfiguration(cmd *cli.Command, signerID string) (time.Duration, *rsa.PrivateKey, error) {
+	reloadIntvl, err := time.ParseDuration(cmd.String("interval"))
 	if err != nil {
 		fmt.Printf("'%s' is not a valid time interval.\n", reloadIntvl)
 		return 0, nil, fmt.Errorf("'%s' is not a valid time interval.\n", reloadIntvl)
 	}
 
-	signerKey := c.String("key")
+	signerKey := cmd.String("key")
 	if signerKey == "" {
 		signerKey = signerFile(signerID) + ".pem"
 	}
 
-	auto := c.Bool("yes")
+	auto := cmd.Bool("yes")
 	privKey, err := getOrNewSigningCert(&signerKey, signerID, auto)
 	if err != nil {
 		lgr.WithError(err).Fatal("Fatal error")
@@ -659,15 +659,15 @@ func setupSigningConfiguration(c *cli.Context, signerID string) (time.Duration, 
 }
 
 // initializeReseeder creates and configures a new reseeder instance.
-func initializeReseeder(c *cli.Context, netdbDir, signerID string, privKey *rsa.PrivateKey, reloadIntvl time.Duration) (*reseed.ReseederImpl, error) {
-	routerInfoAge := c.Duration("routerInfoAge")
+func initializeReseeder(cmd *cli.Command, netdbDir, signerID string, privKey *rsa.PrivateKey, reloadIntvl time.Duration) (*reseed.ReseederImpl, error) {
+	routerInfoAge := cmd.Duration("routerInfoAge")
 	netdb := reseed.NewLocalNetDb(netdbDir, routerInfoAge)
 
 	reseeder := reseed.NewReseeder(netdb)
 	reseeder.SigningKey = privKey
 	reseeder.SignerID = []byte(signerID)
-	reseeder.NumRi = c.Int("numRi")
-	reseeder.NumSu3 = c.Int("numSu3")
+	reseeder.NumRi = cmd.Int("numRi")
+	reseeder.NumSu3 = cmd.Int("numSu3")
 	reseeder.RebuildInterval = reloadIntvl
 	reseeder.Start()
 
@@ -675,24 +675,24 @@ func initializeReseeder(c *cli.Context, netdbDir, signerID string, privKey *rsa.
 }
 
 // Context-aware server functions that return errors instead of calling Fatal
-func reseedHTTPSWithContext(ctx context.Context, c *cli.Context, tlsCert, tlsKey string, reseeder *reseed.ReseederImpl) error {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"), c.Int("ratelimitglobal"))
+func reseedHTTPSWithContext(ctx context.Context, cmd *cli.Command, tlsCert, tlsKey string, reseeder *reseed.ReseederImpl) error {
+	server := reseed.NewServer(cmd.String("prefix"), cmd.Bool("trustProxy"), cmd.String("samaddr"), cmd.Int("ratelimit"), cmd.Int("ratelimitweb"), cmd.Int("ratelimitglobal"))
 	server.Reseeder = reseeder
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+	server.Addr = net.JoinHostPort(cmd.String("ip"), cmd.String("port"))
 
 	// load a blacklist
 	blacklist := reseed.NewBlacklist()
 	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
+	blacklistFile := cmd.String("blacklist")
 	if "" != blacklistFile {
 		blacklist.LoadFile(blacklistFile)
 	}
 
 	// print stats once in a while
-	if c.Duration("stats") != 0 {
+	if cmd.Duration("stats") != 0 {
 		go func() {
 			var mem runtime.MemStats
-			ticker := time.NewTicker(c.Duration("stats"))
+			ticker := time.NewTicker(cmd.Duration("stats"))
 			defer ticker.Stop()
 			for {
 				select {
@@ -722,24 +722,24 @@ func reseedHTTPSWithContext(ctx context.Context, c *cli.Context, tlsCert, tlsKey
 	return nil
 }
 
-func reseedHTTPWithContext(ctx context.Context, c *cli.Context, reseeder *reseed.ReseederImpl) error {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"), c.Int("ratelimitglobal"))
+func reseedHTTPWithContext(ctx context.Context, cmd *cli.Command, reseeder *reseed.ReseederImpl) error {
+	server := reseed.NewServer(cmd.String("prefix"), cmd.Bool("trustProxy"), cmd.String("samaddr"), cmd.Int("ratelimit"), cmd.Int("ratelimitweb"), cmd.Int("ratelimitglobal"))
 	server.Reseeder = reseeder
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+	server.Addr = net.JoinHostPort(cmd.String("ip"), cmd.String("port"))
 
 	// load a blacklist
 	blacklist := reseed.NewBlacklist()
 	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
+	blacklistFile := cmd.String("blacklist")
 	if "" != blacklistFile {
 		blacklist.LoadFile(blacklistFile)
 	}
 
 	// print stats once in a while
-	if c.Duration("stats") != 0 {
+	if cmd.Duration("stats") != 0 {
 		go func() {
 			var mem runtime.MemStats
-			ticker := time.NewTicker(c.Duration("stats"))
+			ticker := time.NewTicker(cmd.Duration("stats"))
 			defer ticker.Stop()
 			for {
 				select {
@@ -770,15 +770,15 @@ func reseedHTTPWithContext(ctx context.Context, c *cli.Context, reseeder *reseed
 }
 
 // setupOnionServer configures a new reseed server instance with blacklist support.
-func setupOnionServer(c *cli.Context, reseeder *reseed.ReseederImpl) *reseed.Server {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"), c.Int("ratelimitglobal"))
+func setupOnionServer(cmd *cli.Command, reseeder *reseed.ReseederImpl) *reseed.Server {
+	server := reseed.NewServer(cmd.String("prefix"), cmd.Bool("trustProxy"), cmd.String("samaddr"), cmd.Int("ratelimit"), cmd.Int("ratelimitweb"), cmd.Int("ratelimitglobal"))
 	server.Reseeder = reseeder
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+	server.Addr = net.JoinHostPort(cmd.String("ip"), cmd.String("port"))
 
 	// load a blacklist
 	blacklist := reseed.NewBlacklist()
 	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
+	blacklistFile := cmd.String("blacklist")
 	if "" != blacklistFile {
 		blacklist.LoadFile(blacklistFile)
 	}
@@ -787,14 +787,14 @@ func setupOnionServer(c *cli.Context, reseeder *reseed.ReseederImpl) *reseed.Ser
 }
 
 // startStatsMonitoring begins memory statistics monitoring in a separate goroutine.
-func startStatsMonitoring(ctx context.Context, c *cli.Context) {
-	if c.Duration("stats") == 0 {
+func startStatsMonitoring(ctx context.Context, cmd *cli.Command) {
+	if cmd.Duration("stats") == 0 {
 		return
 	}
 
 	go func() {
 		var mem runtime.MemStats
-		ticker := time.NewTicker(c.Duration("stats"))
+		ticker := time.NewTicker(cmd.Duration("stats"))
 		defer ticker.Stop()
 		for {
 			select {
@@ -809,8 +809,8 @@ func startStatsMonitoring(ctx context.Context, c *cli.Context) {
 }
 
 // calculateOnionPort parses the port from context and increments it for onion service.
-func calculateOnionPort(c *cli.Context) (int, error) {
-	port, err := strconv.Atoi(c.String("port"))
+func calculateOnionPort(cmd *cli.Command) (int, error) {
+	port, err := strconv.Atoi(cmd.String("port"))
 	if err != nil {
 		return 0, fmt.Errorf("invalid port: %w", err)
 	}
@@ -830,13 +830,13 @@ func createTorListenConf(port int, key ed25519.PrivateKey, remotePorts []int, si
 }
 
 // handleOnionKeyBasedService manages onion service startup based on existing key file.
-func handleOnionKeyBasedService(server *reseed.Server, c *cli.Context, port int, onionTlsCert, onionTlsKey string) error {
-	ok, err := os.ReadFile(c.String("onionKey"))
+func handleOnionKeyBasedService(server *reseed.Server, cmd *cli.Command, port int, onionTlsCert, onionTlsKey string) error {
+	ok, err := os.ReadFile(cmd.String("onionKey"))
 	if err != nil {
 		return fmt.Errorf("failed to read onion key: %w", err)
 	}
 
-	singleOnion := c.Bool("singleOnion")
+	singleOnion := cmd.Bool("singleOnion")
 	if onionTlsCert != "" && onionTlsKey != "" {
 		tlc := createTorListenConf(port, ed25519.PrivateKey(ok), []int{443}, singleOnion)
 		return server.ListenAndServeOnionTLS(nil, tlc, onionTlsCert, onionTlsKey)
@@ -846,11 +846,11 @@ func handleOnionKeyBasedService(server *reseed.Server, c *cli.Context, port int,
 	}
 }
 
-func reseedOnionWithContext(ctx context.Context, c *cli.Context, onionTlsCert, onionTlsKey string, reseeder *reseed.ReseederImpl) error {
-	server := setupOnionServer(c, reseeder)
-	startStatsMonitoring(ctx, c)
+func reseedOnionWithContext(ctx context.Context, cmd *cli.Command, onionTlsCert, onionTlsKey string, reseeder *reseed.ReseederImpl) error {
+	server := setupOnionServer(cmd, reseeder)
+	startStatsMonitoring(ctx, cmd)
 
-	port, err := calculateOnionPort(c)
+	port, err := calculateOnionPort(cmd)
 	if err != nil {
 		return err
 	}
@@ -864,14 +864,14 @@ func reseedOnionWithContext(ctx context.Context, c *cli.Context, onionTlsCert, o
 		}
 	}()
 
-	if _, err := os.Stat(c.String("onionKey")); err == nil {
-		err := handleOnionKeyBasedService(server, c, port, onionTlsCert, onionTlsKey)
+	if _, err := os.Stat(cmd.String("onionKey")); err == nil {
+		err := handleOnionKeyBasedService(server, cmd, port, onionTlsCert, onionTlsKey)
 		if err != nil && err != http.ErrServerClosed {
 			return err
 		}
 		return nil
 	} else if os.IsNotExist(err) {
-		tlc := createTorListenConf(port, nil, []int{80}, c.Bool("singleOnion"))
+		tlc := createTorListenConf(port, nil, []int{80}, cmd.Bool("singleOnion"))
 		err := server.ListenAndServeOnion(nil, tlc)
 		if err != nil && err != http.ErrServerClosed {
 			return err
@@ -884,12 +884,12 @@ func reseedOnionWithContext(ctx context.Context, c *cli.Context, onionTlsCert, o
 
 // reseedI2PWithContext starts an I2P reseed server using the SAM interface for network connectivity.
 // It configures the server with rate limiting, blacklist filtering, and optional TLS support.
-func reseedI2PWithContext(ctx context.Context, c *cli.Context, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) error {
-	server := configureI2PReseederServer(c, reseeder)
+func reseedI2PWithContext(ctx context.Context, cmd *cli.Command, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) error {
+	server := configureI2PReseederServer(cmd, reseeder)
 
-	configureServerBlacklist(server, c)
+	configureServerBlacklist(server, cmd)
 
-	startI2PStatsMonitoring(ctx, c)
+	startI2PStatsMonitoring(ctx, cmd)
 
 	go func() {
 		<-ctx.Done()
@@ -900,7 +900,7 @@ func reseedI2PWithContext(ctx context.Context, c *cli.Context, i2pTlsCert, i2pTl
 		}
 	}()
 
-	err := startI2PServerListener(server, c, i2pTlsCert, i2pTlsKey, i2pIdentKey)
+	err := startI2PServerListener(server, cmd, i2pTlsCert, i2pTlsKey, i2pIdentKey)
 	if err != nil && err != http.ErrServerClosed {
 		return err
 	}
@@ -909,19 +909,19 @@ func reseedI2PWithContext(ctx context.Context, c *cli.Context, i2pTlsCert, i2pTl
 
 // configureI2PReseederServer creates and configures a new reseed server for I2P networking.
 // It sets up rate limiting, network address, and basic server configuration.
-func configureI2PReseederServer(c *cli.Context, reseeder *reseed.ReseederImpl) *reseed.Server {
-	server := reseed.NewServer(c.String("prefix"), c.Bool("trustProxy"), c.String("samaddr"), c.Int("ratelimit"), c.Int("ratelimitweb"), c.Int("ratelimitglobal"))
+func configureI2PReseederServer(cmd *cli.Command, reseeder *reseed.ReseederImpl) *reseed.Server {
+	server := reseed.NewServer(cmd.String("prefix"), cmd.Bool("trustProxy"), cmd.String("samaddr"), cmd.Int("ratelimit"), cmd.Int("ratelimitweb"), cmd.Int("ratelimitglobal"))
 	server.Reseeder = reseeder
-	server.Addr = net.JoinHostPort(c.String("ip"), c.String("port"))
+	server.Addr = net.JoinHostPort(cmd.String("ip"), cmd.String("port"))
 	return server
 }
 
 // configureServerBlacklist sets up IP blacklist filtering for the server based on configuration.
 // It loads blacklist entries from a file if specified in the configuration.
-func configureServerBlacklist(server *reseed.Server, c *cli.Context) {
+func configureServerBlacklist(server *reseed.Server, cmd *cli.Command) {
 	blacklist := reseed.NewBlacklist()
 	server.Blacklist = blacklist
-	blacklistFile := c.String("blacklist")
+	blacklistFile := cmd.String("blacklist")
 	if blacklistFile != "" {
 		blacklist.LoadFile(blacklistFile)
 	}
@@ -929,14 +929,14 @@ func configureServerBlacklist(server *reseed.Server, c *cli.Context) {
 
 // startI2PStatsMonitoring launches a background goroutine to periodically log memory statistics for I2P.
 // It respects the context cancellation and runs at the interval specified in configuration.
-func startI2PStatsMonitoring(ctx context.Context, c *cli.Context) {
-	if c.Duration("stats") == 0 {
+func startI2PStatsMonitoring(ctx context.Context, cmd *cli.Command) {
+	if cmd.Duration("stats") == 0 {
 		return
 	}
 
 	go func() {
 		var mem runtime.MemStats
-		ticker := time.NewTicker(c.Duration("stats"))
+		ticker := time.NewTicker(cmd.Duration("stats"))
 		defer ticker.Stop()
 		for {
 			select {
@@ -952,17 +952,17 @@ func startI2PStatsMonitoring(ctx context.Context, c *cli.Context) {
 
 // startI2PServerListener starts the I2P server with optional TLS configuration.
 // It chooses between TLS and non-TLS server variants based on certificate availability.
-func startI2PServerListener(server *reseed.Server, c *cli.Context, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys.I2PKeys) error {
+func startI2PServerListener(server *reseed.Server, cmd *cli.Command, i2pTlsCert, i2pTlsKey string, i2pIdentKey i2pkeys.I2PKeys) error {
 	if i2pTlsCert != "" && i2pTlsKey != "" {
-		return server.ListenAndServeI2PTLS(c.String("samaddr"), i2pIdentKey, i2pTlsCert, i2pTlsKey)
+		return server.ListenAndServeI2PTLS(cmd.String("samaddr"), i2pIdentKey, i2pTlsCert, i2pTlsKey)
 	} else {
-		return server.ListenAndServeI2P(c.String("samaddr"), i2pIdentKey)
+		return server.ListenAndServeI2P(cmd.String("samaddr"), i2pIdentKey)
 	}
 }
 
 // startOnionServer launches the onion server in a goroutine if enabled.
-func startOnionServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
-	if !c.Bool("onion") {
+func startOnionServer(ctx context.Context, cmd *cli.Command, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
+	if !cmd.Bool("onion") {
 		return
 	}
 
@@ -970,7 +970,7 @@ func startOnionServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfigu
 	go func() {
 		defer wg.Done()
 		lgr.WithField("service", "onion").Debug("Onion server starting")
-		if err := reseedOnionWithContext(ctx, c, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder); err != nil {
+		if err := reseedOnionWithContext(ctx, cmd, tlsConfig.onionTlsCert, tlsConfig.onionTlsKey, reseeder); err != nil {
 			select {
 			case errChan <- fmt.Errorf("onion server error: %w", err):
 			default:
@@ -980,8 +980,8 @@ func startOnionServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfigu
 }
 
 // startI2PServer launches the I2P server in a goroutine if enabled.
-func startI2PServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
-	if !c.Bool("i2p") {
+func startI2PServer(ctx context.Context, cmd *cli.Command, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
+	if !cmd.Bool("i2p") {
 		return
 	}
 
@@ -989,7 +989,7 @@ func startI2PServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfigura
 	go func() {
 		defer wg.Done()
 		lgr.WithField("service", "i2p").Debug("I2P server starting")
-		if err := reseedI2PWithContext(ctx, c, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder); err != nil {
+		if err := reseedI2PWithContext(ctx, cmd, tlsConfig.i2pTlsCert, tlsConfig.i2pTlsKey, i2pkey, reseeder); err != nil {
 			select {
 			case errChan <- fmt.Errorf("i2p server error: %w", err):
 			default:
@@ -999,11 +999,11 @@ func startI2PServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfigura
 }
 
 // startHTTPServer launches the appropriate HTTP/HTTPS server in a goroutine.
-func startHTTPServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
+func startHTTPServer(ctx context.Context, cmd *cli.Command, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl, wg *sync.WaitGroup, errChan chan<- error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := runHTTPServerBasedOnConfig(ctx, c, tlsConfig, reseeder)
+		err := runHTTPServerBasedOnConfig(ctx, cmd, tlsConfig, reseeder)
 		if err != nil {
 			sendErrorToChannel(errChan, err)
 		}
@@ -1012,13 +1012,13 @@ func startHTTPServer(ctx context.Context, c *cli.Context, tlsConfig *tlsConfigur
 
 // runHTTPServerBasedOnConfig determines whether to run HTTP or HTTPS server based on the trustProxy configuration.
 // It starts the appropriate server type and returns any errors that occur during startup or operation.
-func runHTTPServerBasedOnConfig(ctx context.Context, c *cli.Context, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl) error {
-	if !c.Bool("trustProxy") {
+func runHTTPServerBasedOnConfig(ctx context.Context, cmd *cli.Command, tlsConfig *tlsConfiguration, reseeder *reseed.ReseederImpl) error {
+	if !cmd.Bool("trustProxy") {
 		lgr.WithField("service", "https").Debug("HTTPS server starting")
-		return reseedHTTPSWithContext(ctx, c, tlsConfig.tlsCert, tlsConfig.tlsKey, reseeder)
+		return reseedHTTPSWithContext(ctx, cmd, tlsConfig.tlsCert, tlsConfig.tlsKey, reseeder)
 	} else {
 		lgr.WithField("service", "http").Debug("HTTP server starting")
-		return reseedHTTPWithContext(ctx, c, reseeder)
+		return reseedHTTPWithContext(ctx, cmd, reseeder)
 	}
 }
 
@@ -1056,7 +1056,7 @@ func waitForServerCompletion(wg *sync.WaitGroup, errChan chan error) {
 
 // startConfiguredServers starts all enabled server protocols (Onion, I2P, HTTP/HTTPS) with proper coordination.
 // It installs an OS signal handler so that SIGINT or SIGTERM triggers a graceful shutdown of all servers.
-func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
+func startConfiguredServers(cmd *cli.Command, tlsConfig *tlsConfiguration, i2pkey i2pkeys.I2PKeys, reseeder *reseed.ReseederImpl) {
 	ctx, cancel, wg, errChan := setupServerContext()
 	defer cancel()
 
@@ -1078,9 +1078,9 @@ func startConfiguredServers(c *cli.Context, tlsConfig *tlsConfiguration, i2pkey 
 		go getSupplementalNetDb(ctx, setupRemoteNetDBConfig.remote, setupRemoteNetDBConfig.password, setupRemoteNetDBConfig.path, setupRemoteNetDBConfig.samaddr)
 	}
 
-	startOnionServer(ctx, c, tlsConfig, reseeder, wg, errChan)
-	startI2PServer(ctx, c, tlsConfig, i2pkey, reseeder, wg, errChan)
-	startHTTPServer(ctx, c, tlsConfig, reseeder, wg, errChan)
+	startOnionServer(ctx, cmd, tlsConfig, reseeder, wg, errChan)
+	startI2PServer(ctx, cmd, tlsConfig, i2pkey, reseeder, wg, errChan)
+	startHTTPServer(ctx, cmd, tlsConfig, reseeder, wg, errChan)
 
 	waitForServerCompletion(wg, errChan)
 }

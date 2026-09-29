@@ -5,6 +5,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/urfave/cli/v3"
@@ -31,9 +32,9 @@ func NewKeygenCommand() *cli.Command {
 	}
 }
 
-func keygenAction(c *cli.Context) error {
-	signerID := c.String("signer")
-	tlsHost := c.String("tlsHost")
+func keygenAction(ctx context.Context, cmd *cli.Command) error {
+	signerID := cmd.String("signer")
+	tlsHost := cmd.String("tlsHost")
 
 	// Validate that at least one key generation option is specified
 	if signerID == "" && tlsHost == "" {

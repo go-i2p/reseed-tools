@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/urfave/cli/v3"
@@ -14,7 +15,7 @@ func NewVersionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "version",
 		Usage: "Print the version number of reseed-tools",
-		Action: func(c *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			// Print the current version from reseed package constants
 			fmt.Printf("%s\n", reseed.Version)
 			return nil

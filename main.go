@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"runtime"
 
@@ -36,7 +37,7 @@ func main() {
 		// cmd.NewSu3VerifyPublicCommand(),
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		lgr.WithError(err).Error("Application execution failed")
 		os.Exit(1)
 	}

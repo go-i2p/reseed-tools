@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -60,8 +61,8 @@ to prevent "mapping format violation" errors during reseed operations.`,
 }
 
 // diagnoseRouterInfoFiles performs the main diagnosis logic for RouterInfo files
-func diagnoseRouterInfoFiles(ctx *cli.Context) error {
-	config, err := extractDiagnosisConfig(ctx)
+func diagnoseRouterInfoFiles(ctx context.Context, cmd *cli.Command) error {
+	config, err := extractDiagnosisConfig(cmd)
 	if err != nil {
 		return err
 	}
@@ -108,14 +109,14 @@ type diagnosisStats struct {
 	removedFiles   int
 }
 
-// extractDiagnosisConfig extracts and validates configuration from CLI context
-func extractDiagnosisConfig(ctx *cli.Context) (*diagnosisConfig, error) {
+// extractDiagnosisConfig extracts and validates configuration from CLI command
+func extractDiagnosisConfig(cmd *cli.Command) (*diagnosisConfig, error) {
 	config := &diagnosisConfig{
-		netdbPath: ctx.String("netdb"),
-		maxAge:    ctx.Duration("max-age"),
-		removeBad: ctx.Bool("remove-bad"),
-		verbose:   ctx.Bool("verbose"),
-		debug:     ctx.Bool("debug"),
+		netdbPath: cmd.String("netdb"),
+		maxAge:    cmd.Duration("max-age"),
+		removeBad: cmd.Bool("remove-bad"),
+		verbose:   cmd.Bool("verbose"),
+		debug:     cmd.Bool("debug"),
 	}
 
 	// Set debug mode if requested

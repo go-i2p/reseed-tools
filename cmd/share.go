@@ -6,6 +6,7 @@ import (
 
 	"archive/tar"
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
@@ -175,14 +176,14 @@ func SharerWithRateLimit(s *sharer) (http.Handler, error) {
 	return rateLimitMiddleware.RateLimit(s), nil
 }
 
-func shareAction(c *cli.Context) error {
+func shareAction(ctx context.Context, cmd *cli.Command) error {
 	// Convert netDb path to absolute path for consistent file access
-	netDbDir, err := filepath.Abs(c.String("netdb"))
+	netDbDir, err := filepath.Abs(cmd.String("netdb"))
 	if err != nil {
 		return err
 	}
 	// Create password-protected file server for netDb sharing
-	httpFs := Sharer(netDbDir, c.String("share-password"))
+	httpFs := Sharer(netDbDir, cmd.String("share-password"))
 
 	// Wrap with rate limiting middleware
 	rateLimitedHandler, err := SharerWithRateLimit(httpFs)
@@ -191,7 +192,7 @@ func shareAction(c *cli.Context) error {
 	}
 
 	// Initialize I2P garlic routing for hidden service hosting
-	garlic, err := onramp.NewGarlic("reseed", c.String("samaddr"), onramp.OPT_WIDE)
+	garlic, err := onramp.NewGarlic("reseed", cmd.String("samaddr"), onramp.OPT_WIDE)
 	if err != nil {
 		return err
 	}
